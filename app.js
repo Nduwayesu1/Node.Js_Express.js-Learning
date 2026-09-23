@@ -19,10 +19,7 @@ app.get('/api-docs.json', (req, res) => {
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.get('/', (req, res) => {
-    res.json({
-        message: 'API is running',
-        documentation: '/api-docs'
-    });
+    res.redirect('/api-docs');
 });
 
 async function startServer() {
