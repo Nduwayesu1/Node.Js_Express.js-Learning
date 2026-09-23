@@ -1,3 +1,4 @@
+const path = require('path');
 const swaggerJSDoc = require('swagger-jsdoc');
 
 const swaggerDefinition = {
@@ -9,7 +10,7 @@ const swaggerDefinition = {
     },
     servers: [
         {
-            url: 'http://localhost:3000'
+            url: process.env.API_URL || 'http://localhost:3000'
         }
     ],
     components: {
@@ -92,5 +93,5 @@ const swaggerDefinition = {
 
 module.exports = swaggerJSDoc({
     definition: swaggerDefinition,
-    apis: ['./route/*.js']
+    apis: [path.join(__dirname, '..', 'route', '*.js')]
 });

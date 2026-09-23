@@ -1,5 +1,7 @@
+const API_URL = import.meta.env.VITE_API_URL || '';
+
 const apiRequest = async (path, options = {}) => {
-  const response = await fetch(path, {
+  const response = await fetch(`${API_URL}${path}`, {
     headers: {
       'Content-Type': 'application/json',
       ...(options.token ? { Authorization: `Bearer ${options.token}` } : {})
