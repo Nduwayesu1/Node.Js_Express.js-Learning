@@ -21,7 +21,10 @@ function App() {
   useEffect(() => {
     if (!token) return;
     getProfile(token)
-      .then(({ user }) => setProfile(user))
+      .then(({ user }) => {
+        setProfile(user);
+        window.location.hash = `dashboard/${user.role}`;
+      })
       .catch(() => handleLogout());
   }, [token]);
 
@@ -91,6 +94,7 @@ function App() {
     setUsers([]);
     setView('login');
     setForm(initialForm);
+    window.location.hash = '';
   }
 
   if (token && profile) {
