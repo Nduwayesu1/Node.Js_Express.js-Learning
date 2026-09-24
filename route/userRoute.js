@@ -138,6 +138,29 @@ router.get('/users', requireAuth, requireAdmin, userController.listUsers);
 
 /**
  * @swagger
+ * /api/users/{id}/activate:
+ *   patch:
+ *     summary: Activate a user account
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: User account activated successfully
+ *       404:
+ *         description: User not found
+ */
+router.patch('/users/:id/activate', requireAuth, requireAdmin, userController.activateUser);
+router.patch('/users/:id', requireAuth, requireAdmin, userController.updateUser);
+router.delete('/users/:id', requireAuth, requireAdmin, userController.deleteUser);
+
+/**
+ * @swagger
  * /api/users/me:
  *   get:
  *     summary: View the authenticated user's profile

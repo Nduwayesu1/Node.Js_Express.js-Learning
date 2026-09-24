@@ -28,3 +28,6 @@ export const getUsers = (token, params = {}) => {
   const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== '' && value !== undefined));
   return apiRequest(`/api/users${query.toString() ? `?${query}` : ''}`, { token });
 };
+export const activateUser = (token, userId) => apiRequest(`/api/users/${userId}/activate`, { method: 'PATCH', token });
+export const updateUser = (token, userId, body) => apiRequest(`/api/users/${userId}`, { method: 'PATCH', token, body });
+export const deleteUser = (token, userId) => apiRequest(`/api/users/${userId}`, { method: 'DELETE', token });

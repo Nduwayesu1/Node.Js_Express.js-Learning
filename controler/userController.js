@@ -168,6 +168,63 @@ async function listUsers(req, res) {
     }
 }
 
+async function activateUser(req, res) {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        user.isVerified = true;
+        user.otpHash = undefined;
+        user.otpExpiresAt = undefined;
+        await user.save();
+
+        return res.status(200).json({ message: 'User account activated successfully', user });
+    } catch (error) {
+        console.error('User activation failed:', error.message);
+        return res.status(500).json({ message: 'Unable to activate user account' });
+    }
+}
+
+async function updateUser(req, res) {
+    const { name, email, role, isVerified } = req.body;
+    const updates = {};
+
+    if (name !== undefined) updates.name = String(name).trim();
+    if (email !== undefined) updates.email = String(email).trim().toLowerCase();
+    if (role !== undefined && ['user', 'employee', 'admin'].includes(role)) updates.role = role;
+    if (isVerified !== undefined) updates.isVerified = Boolean(isVerified);
+
+    if (!Object.keys(updates).length) {
+        return res.status(400).json({ message: 'At least one valid field is required' });
+    }
+
+    try {
+        const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        return res.status(200).json({ message: 'User updated successfully', user });
+    } catch (error) {
+        console.error('User update failed:', error.message);
+        return res.status(error.code === 11000 ? 409 : 500).json({ message: error.code === 11000 ? 'Email is already in use' : 'Unable to update user' });
+    }
+}
+
+async function deleteUser(req, res) {
+    if (req.params.id === req.user.id) {
+        return res.status(400).json({ message: 'You cannot delete your own admin account' });
+    }
+
+    try {
+        const user = await User.findByIdAndDelete(req.params.id);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        return res.status(200).json({ message: 'User deleted successfully' });
+    } catch (error) {
+        console.error('User deletion failed:', error.message);
+        return res.status(500).json({ message: 'Unable to delete user' });
+    }
+}
+
 async function getMyProfile(req, res) {
     try {
         const user = await User.findById(req.user.id);
@@ -218,6 +275,9 @@ module.exports = {
     verifyOtp,
     loginUser,
     listUsers,
+    activateUser,
+    updateUser,
+    deleteUser,
     getMyProfile,
     updateMyProfile
 };
