@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ArrowRight, AtSign, Check, ChevronLeft, ChevronRight, LayoutDashboard, LockKeyhole, LogOut, Menu, ShieldCheck, Sparkles, UserRound, UsersRound, X } from 'lucide-react';
-import { getProfile, getUsers, login, register, resendOtp, updateProfile, verifyOtp } from './api';
+import { activateUser, getProfile, getUsers, login, register, resendOtp, updateProfile, verifyOtp } from './api';
 import './styles.css';
 
 const initialForm = { name: '', email: '', password: '' };
@@ -24,22 +24,30 @@ function App() {
 
   useEffect(() => {
     if (!token) return;
-    getProfile(token)
+    const loadProfile = () => getProfile(token)
       .then(({ user }) => {
         setProfile(user);
         window.location.hash = `dashboard/${user.role}`;
       })
       .catch(() => handleLogout());
+
+    loadProfile();
+    const refreshTimer = window.setInterval(loadProfile, 60 * 1000);
+    return () => window.clearInterval(refreshTimer);
   }, [token]);
 
   useEffect(() => {
     if (!token || !isAdmin) return;
-    getUsers(token, userQuery)
+    const loadUsers = () => getUsers(token, userQuery)
       .then(({ users: loadedUsers, pagination: loadedPagination }) => {
         setUsers(loadedUsers);
         setPagination(loadedPagination);
       })
       .catch(showError);
+
+    loadUsers();
+    const refreshTimer = window.setInterval(loadUsers, 60 * 1000);
+    return () => window.clearInterval(refreshTimer);
   }, [token, isAdmin, userQuery]);
 
   const showError = (error) => setNotice({ type: 'error', text: error.message });
@@ -97,6 +105,16 @@ function App() {
     }
   }
 
+  async function handleActivateUser(userId) {
+    try {
+      await activateUser(token, userId);
+      setUserQuery({ ...userQuery });
+      setNotice({ type: 'success', text: 'User account activated.' });
+    } catch (error) {
+      showError(error);
+    }
+  }
+
   function handleLogout() {
     localStorage.removeItem('loarn_token');
     setToken(null);
@@ -108,7 +126,7 @@ function App() {
   }
 
   if (token && profile) {
-    return <Dashboard profile={profile} users={users} pagination={pagination} userQuery={userQuery} setUserQuery={setUserQuery} section={section} setSection={setSection} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} form={form} loading={loading} notice={notice} setForm={setForm} onSave={handleProfileSave} onLogout={handleLogout} />;
+    return <Dashboard profile={profile} users={users} pagination={pagination} userQuery={userQuery} setUserQuery={setUserQuery} onActivateUser={handleActivateUser} section={section} setSection={setSection} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} form={form} loading={loading} notice={notice} setForm={setForm} onSave={handleProfileSave} onLogout={handleLogout} />;
   }
 
   return (
@@ -161,12 +179,12 @@ function OtpForm({ otp, setOtp, email, loading, notice, onSubmit, onResend, onBa
 function Field({ icon, ...props }) { return <label className="field"><span>{icon}</span><input {...props} required /></label>; }
 function Notice({ notice }) { return <div className={`notice ${notice.type}`}>{notice.text}</div>; }
 
-function Dashboard({ profile, users, pagination, userQuery, setUserQuery, section, setSection, sidebarOpen, setSidebarOpen, form, loading, notice, setForm, onSave, onLogout }) {
+function Dashboard({ profile, users, pagination, userQuery, setUserQuery, onActivateUser, section, setSection, sidebarOpen, setSidebarOpen, form, loading, notice, setForm, onSave, onLogout }) {
   const firstName = profile.name?.split(' ')[0] || 'there';
   return <main className="dashboard-shell">
     <Sidebar profile={profile} section={section} setSection={setSection} open={sidebarOpen} setOpen={setSidebarOpen} onLogout={onLogout} /><div className="dashboard-main"><header className="topbar"><button className="mobile-menu" onClick={() => setSidebarOpen(true)} title="Open navigation"><Menu size={20} /></button><div className="topbar-user"><span>{profile.email}</span><button className="icon-button" title="Sign out" onClick={onLogout}><LogOut size={18} /></button></div></header>
     <section className="dashboard-content"><div className="welcome-row"><div><span className="eyebrow">{profile.role.toUpperCase()} WORKSPACE</span><h1>Welcome, <em>{firstName}</em> <span className="wave">✦</span></h1></div><div className="role-pill"><ShieldCheck size={15} /> {profile.role}</div></div>
-      {profile.role === 'admin' && <AdminDashboard users={users} pagination={pagination} query={userQuery} setQuery={setUserQuery} section={section} />}
+      {profile.role === 'admin' && <AdminDashboard users={users} pagination={pagination} query={userQuery} setQuery={setUserQuery} onActivateUser={onActivateUser} section={section} />}
       {profile.role === 'employee' && section !== 'profile' && <EmployeeDashboard profile={profile} users={users} />}
       {profile.role === 'user' && section !== 'profile' && <UserDashboard profile={profile} form={form} loading={loading} notice={notice} setForm={setForm} onSave={onSave} />}
       {section === 'profile' && <UserDashboard profile={profile} form={form} loading={loading} notice={notice} setForm={setForm} onSave={onSave} />}
@@ -181,7 +199,7 @@ function Sidebar({ profile, section, setSection, open, setOpen, onLogout }) {
 
 function StatCard({ label, value, detail, tone = 'violet' }) { return <article className={`stat-card ${tone}`}><div className="stat-label">{label}<span className="stat-menu">...</span></div><strong>{value}</strong><small>{detail}</small></article>; }
 
-function AdminDashboard({ users, pagination, query, setQuery, section }) {
+function AdminDashboard({ users, pagination, query, setQuery, onActivateUser, section }) {
   const verified = users.filter((user) => user.isVerified).length;
   return <><div className="stats-grid"><StatCard label="Total users" value={pagination.total} detail="Accounts in your workspace" /><StatCard label="Verified accounts" value={verified} detail="On this page" tone="green" /><StatCard label="Pending verification" value={users.length - verified} detail="On this page" tone="orange" /><StatCard label="Admin status" value="Active" detail="Full workspace access" tone="blue" /></div><div className={`dashboard-grid role-grid ${section === 'users' ? 'directory-focus' : ''}`}><section className="panel users-panel"><PanelHeading eyebrow="ADMIN DIRECTORY" title="All accounts" icon={<UsersRound size={22} />} /><div className="directory-toolbar"><input value={query.search} onChange={(event) => setQuery({ ...query, page: 1, search: event.target.value })} placeholder="Search name or email" /><select value={query.sortBy} onChange={(event) => setQuery({ ...query, page: 1, sortBy: event.target.value })}><option value="createdAt">Newest</option><option value="name">Name</option><option value="email">Email</option><option value="role">Role</option></select><select value={query.sortOrder} onChange={(event) => setQuery({ ...query, page: 1, sortOrder: event.target.value })}><option value="desc">Desc</option><option value="asc">Asc</option></select></div><UserList users={users} /><div className="pagination"><button className="icon-button" disabled={pagination.page <= 1} onClick={() => setQuery({ ...query, page: pagination.page - 1 })} title="Previous page"><ChevronLeft size={16} /></button><span>Page {pagination.page} of {Math.max(pagination.totalPages, 1)}</span><button className="icon-button" disabled={pagination.page >= pagination.totalPages} onClick={() => setQuery({ ...query, page: pagination.page + 1 })} title="Next page"><ChevronRight size={16} /></button></div></section>{section !== 'users' && <section className="panel insight-panel"><PanelHeading eyebrow="CONTROL CENTER" title="Workspace health" icon={<ShieldCheck size={22} />} /><div className="health-ring"><div><strong>{users.length ? Math.round((verified / users.length) * 100) : 0}%</strong><small>this page</small></div></div><div className="legend-row"><span className="dot green-dot" /> Verified <b>{verified}</b></div><div className="legend-row"><span className="dot orange-dot" /> Pending <b>{users.length - verified}</b></div></section>}</div></>;
 }
@@ -191,6 +209,6 @@ function EmployeeDashboard() { return <><div className="stats-grid"><StatCard la
 function UserDashboard({ profile, form, loading, notice, setForm, onSave }) { return <><div className="stats-grid"><StatCard label="Account status" value="Active" detail="Your account is verified" tone="green" /><StatCard label="Member since" value={new Date(profile.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })} detail="Part of the Loarn workspace" /><StatCard label="Access level" value="Standard" detail="Personal workspace" tone="blue" /><StatCard label="Profile health" value="Ready" detail="Your account is looking good" tone="orange" /></div><div className="dashboard-grid role-grid"><section className="panel profile-panel"><PanelHeading eyebrow="PERSONAL DETAILS" title="My profile" icon={<UserRound size={22} />} /><form onSubmit={onSave} className="form-stack"><Field icon={<UserRound size={17} />} name="name" placeholder="Full name" value={form.name || profile.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /><Field icon={<AtSign size={17} />} name="email" type="email" placeholder="Email address" value={form.email || profile.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /><Field icon={<LockKeyhole size={17} />} name="password" type="password" placeholder="New password (optional)" value={form.password || ''} onChange={(event) => setForm({ ...form, password: event.target.value })} minLength={8} />{notice.text && <Notice notice={notice} />}<button className="primary-button" disabled={loading}>Save changes <Check size={17} /></button></form></section><section className="panel account-card"><PanelHeading eyebrow="ACCOUNT SNAPSHOT" title="Your details" icon={<ShieldCheck size={22} />} /><div className="account-summary"><div className="large-avatar">{profile.name?.charAt(0).toUpperCase()}</div><strong>{profile.name}</strong><span>{profile.email}</span><span className="verified-label"><Check size={14} /> Verified account</span></div></section></div></>; }
 
 function PanelHeading({ eyebrow, title, icon }) { return <div className="panel-heading"><div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div>{icon}</div>; }
-function UserList({ users }) { return <div className="user-list">{users.map((user) => <div className="user-row" key={user._id}><div className="avatar">{user.name?.charAt(0).toUpperCase()}</div><div><strong>{user.name}</strong><small>{user.email}</small></div><span className={`status ${user.isVerified ? 'verified' : ''}`}>{user.isVerified ? 'Verified' : 'Pending'}</span><ChevronRight size={16} /></div>)}{!users.length && <p className="empty-state">No users to show yet.</p>}</div>; }
+function UserList({ users, onActivate = async (userId) => { await activateUser(localStorage.getItem('loarn_token'), userId); window.location.reload(); } }) { return <div className="user-list">{users.map((user) => <div className="user-row" key={user._id}><div className="avatar">{user.name?.charAt(0).toUpperCase()}</div><div><strong>{user.name}</strong><small>{user.email}</small></div><span className={`status ${user.isVerified ? 'verified' : ''}`}>{user.isVerified ? 'Verified' : 'Pending'}</span>{!user.isVerified && <button className="activate-button" onClick={() => onActivate(user._id)}>Activate</button>}<ChevronRight size={16} /></div>)}{!users.length && <p className="empty-state">No users to show yet.</p>}</div>; }
 
 createRoot(document.getElementById('root')).render(<App />);
