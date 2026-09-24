@@ -42,7 +42,12 @@ async function createUser(req, res) {
         return res.status(202).json({ message: 'User created. Check your email for the verification code.' });
     } catch (error) {
         await User.deleteOne({ _id: newUser._id });
-        console.error('OTP email failed:', error.message);
+        console.error('OTP email failed:', {
+            message: error.message,
+            code: error.code,
+            responseCode: error.responseCode,
+            response: error.response
+        });
         return res.status(503).json({ message: 'User created, but the verification email could not be sent' });
     }
 }
