@@ -7,12 +7,19 @@ const userRoutes = require('./route/userRoute');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const configuredOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean)
+    : [];
 
 app.use(express.json());
 app.use(cors({
-    origin: process.env.CORS_ORIGIN
-        ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
-        : true
+    origin: (requestOrigin, callback) => {
+        if (!requestOrigin || configuredOrigins.includes(requestOrigin) || /^https:\/\/frontend-[a-z0-9-]+\.vercel\.app$/i.test(requestOrigin)) {
+            return callback(null, true);
+        }
+
+        return callback(new Error('Origin is not allowed by CORS'));
+    }
 }));
 app.use('/api', userRoutes);
 app.get('/api-docs.json', (req, res) => {
