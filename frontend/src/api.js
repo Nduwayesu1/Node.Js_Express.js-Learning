@@ -19,6 +19,7 @@ const apiRequest = async (path, options = {}) => {
 };
 
 export const register = (body) => apiRequest('/api/users', { method: 'POST', body });
+export const resendOtp = (email) => apiRequest('/api/users/resend-otp', { method: 'POST', body: { email } });
 export const verifyOtp = (otp) => apiRequest('/api/users/verify-otp', { method: 'POST', body: { otp } });
 export const login = (body) => apiRequest('/api/users/login', { method: 'POST', body });
 export const getProfile = (token) => apiRequest('/api/users/me', { token });

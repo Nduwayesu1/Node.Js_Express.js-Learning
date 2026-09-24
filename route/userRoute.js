@@ -32,6 +32,29 @@ router.post('/users', userController.createUser);
 
 /**
  * @swagger
+ * /api/users/resend-otp:
+ *   post:
+ *     summary: Resend an email verification OTP
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email]
+ *             properties:
+ *               email: { type: string, format: email, example: jane@example.com }
+ *     responses:
+ *       202:
+ *         description: Verification code sent
+ *       400:
+ *         description: Invalid or already verified account
+ */
+router.post('/users/resend-otp', userController.resendOtp);
+
+/**
+ * @swagger
  * /api/users/verify-otp:
  *   post:
  *     summary: Verify a user's email using an OTP

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ArrowRight, AtSign, Check, ChevronLeft, ChevronRight, LayoutDashboard, LockKeyhole, LogOut, Menu, ShieldCheck, Sparkles, UserRound, UsersRound, X } from 'lucide-react';
-import { getProfile, getUsers, login, register, updateProfile, verifyOtp } from './api';
+import { getProfile, getUsers, login, register, resendOtp, updateProfile, verifyOtp } from './api';
 import './styles.css';
 
 const initialForm = { name: '', email: '', password: '' };
@@ -125,7 +125,7 @@ function App() {
         </div>
         <section className="auth-card">
           {view === 'otp' ? (
-            <OtpForm otp={otp} setOtp={setOtp} loading={loading} notice={notice} onSubmit={handleVerify} onBack={() => setView('login')} />
+            <OtpForm otp={otp} setOtp={setOtp} email={form.email} loading={loading} notice={notice} onSubmit={handleVerify} onResend={async () => { setLoading(true); try { await resendOtp(form.email); setNotice({ type: 'success', text: 'A new verification code has been sent.' }); } catch (error) { showError(error); } finally { setLoading(false); } }} onBack={() => setView('login')} />
           ) : (
             <AuthForm view={view} form={form} loading={loading} notice={notice} onChange={updateField} onSubmit={handleSubmit} onSwitch={() => { setView(view === 'login' ? 'register' : 'login'); setNotice({ type: '', text: '' }); }} onVerify={() => setView('otp')} />
           )}
@@ -151,10 +151,10 @@ function AuthForm({ view, form, loading, notice, onChange, onSubmit, onSwitch, o
   </>;
 }
 
-function OtpForm({ otp, setOtp, loading, notice, onSubmit, onBack }) {
+function OtpForm({ otp, setOtp, email, loading, notice, onSubmit, onResend, onBack }) {
   return <>
     <div className="otp-icon"><Check size={22} /></div><div className="card-heading"><span className="eyebrow">EMAIL VERIFICATION</span><h2>Enter your code</h2><p>Use the 6-digit code sent to your email.</p></div>
-    <form onSubmit={onSubmit} className="form-stack"><input className="otp-input" inputMode="numeric" pattern="[0-9]{6}" maxLength="6" placeholder="000000" value={otp} onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))} required />{notice.text && <Notice notice={notice} />}<button className="primary-button" disabled={loading}>{loading ? 'Verifying...' : 'Verify email'} <ArrowRight size={17} /></button></form><button className="quiet-button" onClick={onBack}>Back to sign in</button>
+    <form onSubmit={onSubmit} className="form-stack"><input className="otp-input" inputMode="numeric" pattern="[0-9]{6}" maxLength="6" placeholder="000000" value={otp} onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))} required />{notice.text && <Notice notice={notice} />}<button className="primary-button" disabled={loading}>{loading ? 'Verifying...' : 'Verify email'} <ArrowRight size={17} /></button></form><button className="quiet-button" disabled={loading || !email} onClick={onResend}>Resend code</button><button className="quiet-button" onClick={onBack}>Back to sign in</button>
   </>;
 }
 

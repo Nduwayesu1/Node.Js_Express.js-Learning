@@ -16,22 +16,20 @@ async function createUser(req, res) {
         return res.status(400).json({ message: 'Password must be at least 8 characters long' });
     }
 
-    if (await User.findOne({ email })) {
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    const existingUser = await User.findOne({ email });
+    if (existingUser?.isVerified) {
         return res.status(400).json({ message: 'User with this email already exists' });
     }
 
-    const otp = crypto.randomInt(100000, 1000000).toString();
-    const newUser = new User({
-        name,
-        email,
-        password: bcrypt.hashSync(password, 10),
-        role: 'user',
-        otpHash: crypto.createHash('sha256').update(otp).digest('hex'),
-        otpExpiresAt: new Date(Date.now() + 10 * 60 * 1000)
-    });
+    const user = existingUser || new User({ email, role: 'user' });
+    user.name = name;
+    user.password = bcrypt.hashSync(password, 10);
+    user.otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+    user.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     try {
-        await newUser.save();
+        await user.save();
     } catch (error) {
         console.error('User creation failed:', error.message);
         return res.status(500).json({ message: 'Unable to create user' });
@@ -41,7 +39,6 @@ async function createUser(req, res) {
         await sendOtpEmail(email, otp);
         return res.status(202).json({ message: 'User created. Check your email for the verification code.' });
     } catch (error) {
-        await User.deleteOne({ _id: newUser._id });
         console.error('OTP email failed:', {
             message: error.message,
             code: error.code,
@@ -49,6 +46,30 @@ async function createUser(req, res) {
             response: error.response
         });
         return res.status(503).json({ message: 'User created, but the verification email could not be sent' });
+    }
+}
+
+async function resendOtp(req, res) {
+    const email = req.body.email?.trim().toLowerCase();
+    if (!email) {
+        return res.status(400).json({ message: 'Email is required' });
+    }
+
+    try {
+        const user = await User.findOne({ email });
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        if (user.isVerified) return res.status(400).json({ message: 'User is already verified' });
+
+        const otp = crypto.randomInt(100000, 1000000).toString();
+        user.otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+        user.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+        await user.save();
+        await sendOtpEmail(email, otp);
+
+        return res.status(202).json({ message: 'A new verification code has been sent.' });
+    } catch (error) {
+        console.error('OTP resend failed:', { message: error.message, code: error.code, responseCode: error.responseCode });
+        return res.status(503).json({ message: 'The verification email could not be sent' });
     }
 }
 
@@ -193,6 +214,7 @@ async function updateMyProfile(req, res) {
 
 module.exports = {
     createUser,
+    resendOtp,
     verifyOtp,
     loginUser,
     listUsers,
