@@ -40,4 +40,7 @@ async function startServer() {
     });
 }
 
-startServer();
+startServer().catch(error => {
+    console.error('Application startup failed:', error.message);
+    process.exit(1);
+});

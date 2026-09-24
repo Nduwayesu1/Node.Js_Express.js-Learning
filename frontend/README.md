@@ -1,6 +1,6 @@
-# Loarn frontend
+# Loan frontend
 
-React and Vite frontend for the Loarn Application API.
+React and Vite frontend for the Loan Application API.
 
 ## Run locally
 

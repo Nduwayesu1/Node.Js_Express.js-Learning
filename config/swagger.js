@@ -6,7 +6,7 @@ const swaggerDefinition = {
     info: {
         title: 'Loan Application API',
         version: '1.0.0',
-        description: 'API documentation for the Loarn Application'
+        description: 'API documentation for the Loan Application'
     },
     servers: [
         {

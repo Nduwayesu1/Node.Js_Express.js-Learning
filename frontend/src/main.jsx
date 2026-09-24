@@ -118,7 +118,7 @@ function App() {
       <div className="mountains mountain-front" />
       <section className="auth-layout">
         <div className="brand-copy">
-          <div className="brand-mark"><Sparkles size={18} /> LOARN</div>
+          <div className="brand-mark"><Sparkles size={18} /> LOAN</div>
           <h1>Make your next<br /><em>move</em> count.</h1>
           <p>A calm, secure place to manage your account and keep momentum on the things that matter.</p>
           <div className="trust-line"><ShieldCheck size={17} /> Secure account access</div>
@@ -146,7 +146,7 @@ function AuthForm({ view, form, loading, notice, onChange, onSubmit, onSwitch, o
       {notice.text && <Notice notice={notice} />}
       <button className="primary-button" disabled={loading}>{loading ? 'Working...' : registerMode ? 'Create account' : 'Sign in'} <ArrowRight size={17} /></button>
     </form>
-    <div className="card-footer">{registerMode ? 'Already have an account?' : 'New to Loarn?'} <button className="text-button" onClick={onSwitch}>{registerMode ? 'Sign in' : 'Create account'}</button></div>
+    <div className="card-footer">{registerMode ? 'Already have an account?' : 'New to Loan?'} <button className="text-button" onClick={onSwitch}>{registerMode ? 'Sign in' : 'Create account'}</button></div>
     {!registerMode && <button className="quiet-button" onClick={onVerify}>I already have an OTP</button>}
   </>;
 }
@@ -176,7 +176,7 @@ function Dashboard({ profile, users, pagination, userQuery, setUserQuery, sectio
 
 function Sidebar({ profile, section, setSection, open, setOpen, onLogout }) {
   const go = (next) => { setSection(next); setOpen(false); };
-  return <aside className={`sidebar ${open ? 'open' : ''}`}><div className="sidebar-brand"><div className="brand-mark"><Sparkles size={18} /> LOARN</div><button className="icon-button close-sidebar" onClick={() => setOpen(false)} title="Close navigation"><X size={18} /></button></div><div className="sidebar-label">MENU</div><button className={`nav-item ${section === 'overview' ? 'active' : ''}`} onClick={() => go('overview')}><LayoutDashboard size={17} /> Dashboard</button><button className={`nav-item ${section === 'profile' ? 'active' : ''}`} onClick={() => go('profile')}><UserRound size={17} /> My profile</button>{profile.role === 'admin' && <button className={`nav-item ${section === 'users' ? 'active' : ''}`} onClick={() => go('users')}><UsersRound size={17} /> User directory</button>}<div className="sidebar-spacer" /><button className="nav-item logout-item" onClick={onLogout}><LogOut size={17} /> Sign out</button></aside>;
+  return <aside className={`sidebar ${open ? 'open' : ''}`}><div className="sidebar-brand"><div className="brand-mark"><Sparkles size={18} /> LOAN</div><button className="icon-button close-sidebar" onClick={() => setOpen(false)} title="Close navigation"><X size={18} /></button></div><div className="sidebar-label">MENU</div><button className={`nav-item ${section === 'overview' ? 'active' : ''}`} onClick={() => go('overview')}><LayoutDashboard size={17} /> Dashboard</button><button className={`nav-item ${section === 'profile' ? 'active' : ''}`} onClick={() => go('profile')}><UserRound size={17} /> My profile</button>{profile.role === 'admin' && <button className={`nav-item ${section === 'users' ? 'active' : ''}`} onClick={() => go('users')}><UsersRound size={17} /> User directory</button>}<div className="sidebar-spacer" /><button className="nav-item logout-item" onClick={onLogout}><LogOut size={17} /> Sign out</button></aside>;
 }
 
 function StatCard({ label, value, detail, tone = 'violet' }) { return <article className={`stat-card ${tone}`}><div className="stat-label">{label}<span className="stat-menu">...</span></div><strong>{value}</strong><small>{detail}</small></article>; }
