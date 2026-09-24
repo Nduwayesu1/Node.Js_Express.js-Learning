@@ -23,4 +23,7 @@ export const verifyOtp = (otp) => apiRequest('/api/users/verify-otp', { method: 
 export const login = (body) => apiRequest('/api/users/login', { method: 'POST', body });
 export const getProfile = (token) => apiRequest('/api/users/me', { token });
 export const updateProfile = (token, body) => apiRequest('/api/users/me', { method: 'PATCH', token, body });
-export const getUsers = (token) => apiRequest('/api/users', { token });
+export const getUsers = (token, params = {}) => {
+  const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== '' && value !== undefined));
+  return apiRequest(`/api/users${query.toString() ? `?${query}` : ''}`, { token });
+};

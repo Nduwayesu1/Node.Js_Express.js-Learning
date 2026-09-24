@@ -104,9 +104,38 @@ async function loginUser(req, res) {
 }
 
 async function listUsers(req, res) {
+    const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 10, 1), 100);
+    const sortBy = ['name', 'email', 'role', 'createdAt', 'isVerified'].includes(req.query.sortBy)
+        ? req.query.sortBy
+        : 'createdAt';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+    const search = req.query.search?.trim();
+    const role = ['user', 'employee', 'admin'].includes(req.query.role) ? req.query.role : undefined;
+    const filter = {
+        ...(role ? { role } : {}),
+        ...(search ? { $or: [{ name: new RegExp(search, 'i') }, { email: new RegExp(search, 'i') }] } : {})
+    };
+
     try {
-        const users = await User.find().sort({ createdAt: -1 });
-        return res.status(200).json({ users });
+        const [users, total] = await Promise.all([
+            User.find(filter)
+                .sort({ [sortBy]: sortOrder })
+                .skip((page - 1) * limit)
+                .limit(limit),
+            User.countDocuments(filter)
+        ]);
+
+        return res.status(200).json({
+            users,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit)
+            },
+            sort: { sortBy, sortOrder: sortOrder === 1 ? 'asc' : 'desc' }
+        });
     } catch (error) {
         console.error('User list failed:', error.message);
         return res.status(500).json({ message: 'Unable to load users' });
