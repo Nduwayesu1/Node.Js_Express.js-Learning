@@ -14,12 +14,15 @@ const configuredOrigins = process.env.CORS_ORIGIN
 app.use(express.json());
 app.use(cors({
     origin: (requestOrigin, callback) => {
-        if (!requestOrigin || configuredOrigins.includes(requestOrigin) || /^https:\/\/frontend-[a-z0-9-]+\.vercel\.app$/i.test(requestOrigin)) {
+        if (!requestOrigin || configuredOrigins.includes(requestOrigin) || /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(requestOrigin)) {
             return callback(null, true);
         }
 
         return callback(new Error('Origin is not allowed by CORS'));
-    }
+    },
+    methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 204
 }));
 app.use('/api', userRoutes);
 app.get('/api-docs.json', (req, res) => {
