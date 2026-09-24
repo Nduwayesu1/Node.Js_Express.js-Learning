@@ -1,21 +1,26 @@
-const hasSmtpConfig = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
+const smtpHost = process.env.SMTP_HOST?.trim();
+const smtpUser = process.env.SMTP_USER?.trim();
+const smtpPass = process.env.SMTP_PASS?.trim();
+const smtpFrom = process.env.SMTP_FROM?.trim() || smtpUser;
+const smtpPort = Number.parseInt(process.env.SMTP_PORT?.trim() || '587', 10);
+const smtpSecure = process.env.SMTP_SECURE?.trim().toLowerCase() === 'true';
+const hasSmtpConfig = smtpHost && smtpUser && smtpPass;
 
 const transporter = hasSmtpConfig
     ? require('nodemailer').createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT || 587),
-        secure: process.env.SMTP_SECURE === 'true',
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpSecure,
         auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
+            user: smtpUser,
+            pass: smtpPass
         }
     })
     : null;
 
 async function sendOtpEmail(email, otp) {
     if (!transporter) {
-        console.log(`[development] OTP for ${email}: ${otp}`);
-        return;
+        throw new Error('SMTP_HOST, SMTP_USER, and SMTP_PASS must be configured');
     }
 
     const text = `Your Loan verification code is ${otp}. It expires in 10 minutes. If you did not request this code, you can ignore this email.`;
@@ -45,7 +50,7 @@ async function sendOtpEmail(email, otp) {
         </html>`;
 
     await transporter.sendMail({
-        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        from: smtpFrom,
         to: email,
         subject: 'Your Loan Application verification code',
         text,
