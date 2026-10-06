@@ -1,5 +1,7 @@
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const User = require('../modle/User');
+const Bank = require('../modle/Bank');
 const bcrypt = require('bcryptjs');
 const { sendOtpEmail } = require('../config/mailer');
 const { createToken } = require('../config/jwt');
@@ -188,13 +190,40 @@ async function activateUser(req, res) {
 }
 
 async function updateUser(req, res) {
-    const { name, email, role, isVerified } = req.body;
+    const { name, email, role, isVerified, bankId, branchId } = req.body;
     const updates = {};
 
     if (name !== undefined) updates.name = String(name).trim();
     if (email !== undefined) updates.email = String(email).trim().toLowerCase();
     if (role !== undefined && ['user', 'employee', 'admin'].includes(role)) updates.role = role;
     if (isVerified !== undefined) updates.isVerified = Boolean(isVerified);
+    if (bankId !== undefined) {
+        if (bankId && !mongoose.Types.ObjectId.isValid(bankId)) {
+            return res.status(400).json({ message: 'Invalid bank selection' });
+        }
+        updates.bankId = bankId || null;
+        if (branchId === undefined) updates.branchId = null;
+    }
+    if (branchId !== undefined) {
+        if (branchId && !mongoose.Types.ObjectId.isValid(branchId)) {
+            return res.status(400).json({ message: 'Invalid branch selection' });
+        }
+        updates.branchId = branchId || null;
+    }
+
+    if (updates.bankId || updates.branchId) {
+        const currentUser = await User.findById(req.params.id).select('bankId role');
+        if (!currentUser) return res.status(404).json({ message: 'User not found' });
+        const selectedBankId = updates.bankId || currentUser.bankId;
+        const selectedRole = updates.role || currentUser.role;
+        if (selectedRole !== 'employee') return res.status(400).json({ message: 'Only employee accounts can be assigned to a bank' });
+        if (!selectedBankId) return res.status(400).json({ message: 'Select a bank before assigning a branch' });
+        const bank = await Bank.findById(selectedBankId);
+        if (!bank) return res.status(404).json({ message: 'Bank not found' });
+        if (updates.branchId && !bank.branches.id(updates.branchId)) {
+            return res.status(400).json({ message: 'The selected branch does not belong to this bank' });
+        }
+    }
 
     if (!Object.keys(updates).length) {
         return res.status(400).json({ message: 'At least one valid field is required' });

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" role="img" aria-labelledby="title">
+  <title id="title">Rwandan franc</title>
+  <circle cx="40" cy="40" r="35" fill="#fff" stroke="#111" stroke-width="2.2"/>
+  <circle cx="40" cy="40" r="30" fill="none" stroke="#111" stroke-width="1.5"/>
+  <circle cx="40" cy="40" r="25" fill="none" stroke="#111" stroke-width="1.2"/>
+  <path d="M9 22h5m-7 4h6m-7 4h6m-7 4h6m-7 4h6m-7 4h6m-6 4h6m-5 4h6m-4 4h6m-3 4h6" stroke="#111" stroke-width="1.2"/>
+  <path d="M18 13 14 9m8 1-4-5m9 4-3-6m9 5-1-6m8 6V2m7 7 1-6m6 9 3-6m4 10 4-5m1 12 5-4" stroke="#111" stroke-width="1.1"/>
+  <text x="40" y="47" text-anchor="middle" fill="#111" font-family="Georgia,serif" font-size="22">RF</text>
+</svg>

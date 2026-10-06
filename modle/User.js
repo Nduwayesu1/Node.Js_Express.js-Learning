@@ -34,6 +34,17 @@ const userSchema = new Schema(
         enum: ['user', 'admin','employee'],
         default: 'user'
       },
+      bankId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Bank'
+      },
+      branchId: {
+        type: Schema.Types.ObjectId
+      },
+      bankAccountId: {
+        type: Schema.Types.ObjectId,
+        ref: 'BankAccount'
+      },
       createdAt: {
         type: Date,
         default: Date.now

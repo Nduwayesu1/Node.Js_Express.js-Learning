@@ -6,7 +6,13 @@ function createToken(user) {
     }
 
     return jwt.sign(
-        { id: user._id.toString(), email: user.email, role: user.role },
+        {
+            id: user._id.toString(),
+            email: user.email,
+            role: user.role,
+            bankId: user.bankId?.toString(),
+            branchId: user.branchId?.toString()
+        },
         process.env.JWT_SECRET,
         { expiresIn: '1d' }
     );
