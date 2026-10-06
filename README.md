@@ -1,5 +1,9 @@
 # Node.Js_Express.js-Learning
 
+## API documentation
+
+The interactive Swagger UI is available at `/api-docs` and the generated OpenAPI JSON at `/api-docs.json`. The spec is generated from the route annotations and documents authentication, bank accounts and transfers, Paypack deposits and webhooks, loan applications and repayments, and payroll operations.
+
 ## Loan finance
 
 Customers choose the bank and sub-branch and request a term in months. The system sets the annual interest rate for every approved loan using `SYSTEM_ANNUAL_INTEREST_RATE` (12% by default). Managers approve or decline applications but cannot change the rate. The quoted installment and expected interest use reducing-balance amortization.

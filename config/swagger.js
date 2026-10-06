@@ -93,5 +93,5 @@ const swaggerDefinition = {
 
 module.exports = swaggerJSDoc({
     definition: swaggerDefinition,
-    apis: [path.join(__dirname, '..', 'route', '*.js')]
+    apis: [path.join(__dirname, '..', 'route', '*.js').replace(/\\/g, '/')]
 });

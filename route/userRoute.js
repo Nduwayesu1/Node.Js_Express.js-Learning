@@ -156,7 +156,61 @@ router.get('/users', requireAuth, requireAdmin, userController.listUsers);
  *         description: User not found
  */
 router.patch('/users/:id/activate', requireAuth, requireAdmin, userController.activateUser);
+
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   patch:
+ *     summary: Update a user's details or employee assignment
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               email: { type: string, format: email }
+ *               role: { type: string, enum: [user, employee, admin] }
+ *               isVerified: { type: boolean }
+ *               bankId: { type: string, nullable: true }
+ *               branchId: { type: string, nullable: true }
+ *     responses:
+ *       200: { description: User updated }
+ *       400: { description: No valid fields or invalid employee assignment }
+ *       403: { description: Administrator access is required }
+ *       404: { description: User or bank not found }
+ *       409: { description: Email is already in use }
+ */
 router.patch('/users/:id', requireAuth, requireAdmin, userController.updateUser);
+
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   delete:
+ *     summary: Delete a user
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: User deleted }
+ *       400: { description: Admin cannot delete their own account }
+ *       403: { description: Administrator access is required }
+ *       404: { description: User not found }
+ */
 router.delete('/users/:id', requireAuth, requireAdmin, userController.deleteUser);
 
 /**
