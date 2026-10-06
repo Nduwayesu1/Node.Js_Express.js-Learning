@@ -128,6 +128,10 @@ router.post('/users/login', userController.loginUser);
  *       - in: query
  *         name: role
  *         schema: { type: string, enum: [user, employee, admin] }
+ *       - in: query
+ *         name: bankId
+ *         description: Filter users assigned to this bank
+ *         schema: { type: string }
  *     responses:
  *       200:
  *         description: Users returned successfully

@@ -20,6 +20,8 @@ Repayments are recorded in whole RWF amounts. Accrued interest is calculated dai
 
 Loan applications, decisions, repayments, and defaults are stored in MongoDB and limited to the applicant, administrators, or employees assigned to the loan's bank sub-branch.
 
+Administrators can change verified users between customer, employee, and administrator roles from the User Directory. Employee assignments include a bank and sub-branch. Each bank's profile in Bank branches displays its assigned staff grouped with their sub-branch and verification status.
+
 ## Mobile-money deposits
 
 Deposits use Paypack cash-in. Configure `PAYPACK_CLIENT_ID`, `PAYPACK_CLIENT_SECRET`, `PAYPACK_WEBHOOK_SECRET`, and `PAYPACK_ENVIRONMENT` on the backend. Register `https://<your-api-host>/api/payments/paypack/webhook` as an active Paypack webhook for the matching Development or Production mode. The webhook signing secret is available from the webhook configuration in Paypack. Keep these secrets only on the backend.

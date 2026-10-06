@@ -140,8 +140,13 @@ async function listUsers(req, res) {
     const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
     const search = req.query.search?.trim();
     const role = ['user', 'employee', 'admin'].includes(req.query.role) ? req.query.role : undefined;
+    const bankId = req.query.bankId;
+    if (bankId && !mongoose.Types.ObjectId.isValid(bankId)) {
+        return res.status(400).json({ message: 'Invalid bank selection' });
+    }
     const filter = {
         ...(role ? { role } : {}),
+        ...(bankId ? { bankId } : {}),
         ...(search ? { $or: [{ name: new RegExp(search, 'i') }, { email: new RegExp(search, 'i') }] } : {})
     };
 
@@ -195,7 +200,12 @@ async function updateUser(req, res) {
 
     if (name !== undefined) updates.name = String(name).trim();
     if (email !== undefined) updates.email = String(email).trim().toLowerCase();
-    if (role !== undefined && ['user', 'employee', 'admin'].includes(role)) updates.role = role;
+    if (role !== undefined) {
+        if (!['user', 'employee', 'admin'].includes(role)) {
+            return res.status(400).json({ message: 'Role must be user, employee, or admin' });
+        }
+        updates.role = role;
+    }
     if (isVerified !== undefined) updates.isVerified = Boolean(isVerified);
     if (bankId !== undefined) {
         if (bankId && !mongoose.Types.ObjectId.isValid(bankId)) {
@@ -211,25 +221,43 @@ async function updateUser(req, res) {
         updates.branchId = branchId || null;
     }
 
-    if (updates.bankId || updates.branchId) {
-        const currentUser = await User.findById(req.params.id).select('bankId role');
-        if (!currentUser) return res.status(404).json({ message: 'User not found' });
-        const selectedBankId = updates.bankId || currentUser.bankId;
-        const selectedRole = updates.role || currentUser.role;
-        if (selectedRole !== 'employee') return res.status(400).json({ message: 'Only employee accounts can be assigned to a bank' });
-        if (!selectedBankId) return res.status(400).json({ message: 'Select a bank before assigning a branch' });
-        const bank = await Bank.findById(selectedBankId);
-        if (!bank) return res.status(404).json({ message: 'Bank not found' });
-        if (updates.branchId && !bank.branches.id(updates.branchId)) {
-            return res.status(400).json({ message: 'The selected branch does not belong to this bank' });
-        }
-    }
-
     if (!Object.keys(updates).length) {
         return res.status(400).json({ message: 'At least one valid field is required' });
     }
 
     try {
+        const currentUser = await User.findById(req.params.id).select('bankId branchId role');
+        if (!currentUser) return res.status(404).json({ message: 'User not found' });
+        if (updates.role !== undefined && updates.role !== currentUser.role) {
+            if (req.params.id === req.user.id) {
+                return res.status(400).json({ message: 'You cannot change your own role' });
+            }
+            if (currentUser.role === 'admin' && updates.role !== 'admin'
+                && await User.countDocuments({ role: 'admin' }) <= 1) {
+                return res.status(409).json({ message: 'At least one administrator account must remain' });
+            }
+        }
+
+        if (updates.role && updates.role !== 'employee') {
+            updates.bankId = null;
+            updates.branchId = null;
+        }
+
+        if (updates.bankId || updates.branchId) {
+            const selectedBankId = updates.bankId || currentUser.bankId;
+            const selectedRole = updates.role || currentUser.role;
+            if (selectedRole !== 'employee') return res.status(400).json({ message: 'Only employee accounts can be assigned to a bank' });
+            if (!selectedBankId) return res.status(400).json({ message: 'Select a bank before assigning a branch' });
+            const bank = await Bank.findById(selectedBankId);
+            if (!bank) return res.status(404).json({ message: 'Bank not found' });
+            const selectedBranchId = updates.branchId !== undefined
+                ? updates.branchId
+                : (updates.bankId ? null : currentUser.branchId);
+            if (selectedBranchId && !bank.branches.id(selectedBranchId)) {
+                return res.status(400).json({ message: 'The selected branch does not belong to this bank' });
+            }
+        }
+
         const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
         if (!user) return res.status(404).json({ message: 'User not found' });
         return res.status(200).json({ message: 'User updated successfully', user });

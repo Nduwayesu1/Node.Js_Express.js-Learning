@@ -311,7 +311,7 @@ function Dashboard({ profile, users, banks, token, pagination, userQuery, setUse
     <section className={`dashboard-content ${bankView ? 'bank-dashboard' : ''}`}><div className="welcome-row"><div><span className="eyebrow">{manager ? 'BRANCH MANAGER' : profile.role.toUpperCase()} WORKSPACE</span><h1>Welcome, <em>{firstName}</em> <span className="wave">✦</span></h1></div><div className="role-pill"><ShieldCheck size={15} /> {manager ? 'Manager' : profile.role}</div></div>
       {profile.role === 'admin' && ['overview', 'users'].includes(section) && <AdminCreateUser onCreated={onUserCreated} />}
       {profile.role === 'admin' && !['deposits', 'applications', 'banks'].includes(section) && <AdminDashboard users={users} pagination={pagination} query={userQuery} setQuery={setUserQuery} onActivateUser={onActivateUser} onRoleUpdate={onRoleUpdate} onUserCreated={onUserCreated} section={section} />}
-      {profile.role === 'admin' && section === 'users' && <AdminEmployeeAccess users={users} banks={banks} onRoleUpdate={onRoleUpdate} />}
+      {profile.role === 'admin' && section === 'users' && <AdminEmployeeAccess users={users} banks={banks} currentUserId={profile._id} onRoleUpdate={onRoleUpdate} />}
       {profile.role === 'admin' && section === 'deposits' && <AdminDepositDashboard token={token} />}
       {profile.role === 'admin' && section === 'applications' && <ManagerDashboard applications={loanApplications} systemAnnualInterestRate={systemAnnualInterestRate} section={section} notice={notice} onDecision={onLoanDecision} onRepayment={onLoanRepayment} onDefault={onLoanDefault} />}
       {profile.role === 'admin' && section === 'banks' && <AdminBankDashboard banks={banks} loanApplications={loanApplications} token={token} onCreated={onBankCreated} />}
@@ -348,12 +348,12 @@ function AdminCreateUser({ onCreated }) {
   return <section className="panel create-user-panel"><PanelHeading eyebrow="ADMIN DIRECTORY" title="Create user account" icon={<UserPlus size={22} />} /><form className="create-user-form" onSubmit={handleSubmit}><label className="create-user-field">Full name<input autoComplete="name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label><label className="create-user-field">Email address<input type="email" autoComplete="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label><label className="create-user-field">Temporary password<input type="password" autoComplete="new-password" minLength={8} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required /></label><button className="create-user-submit" type="submit" disabled={submitting}><UserPlus size={16} /> {submitting ? 'Creating...' : 'Create user'}</button></form>{notice.text && <div className="create-user-notice"><Notice notice={notice} /></div>}<p className="create-user-help">The user must verify their email before signing in.</p></section>;
 }
 
-function AdminEmployeeAccess({ users, banks, onRoleUpdate }) {
-  const eligibleUsers = users.filter((user) => user.isVerified && user.role !== 'admin');
-  return <section className="panel employee-access-panel"><PanelHeading eyebrow="STAFF ACCESS" title="Employee accounts" icon={<UsersRound size={22} />} /><p>Assign verified staff accounts to a bank and sub-branch. The Finance Manager email must match an assigned employee login.</p>{eligibleUsers.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Employee</th><th>Role</th><th>Bank and sub-branch</th><th>Assignment</th></tr></thead><tbody>{eligibleUsers.map((user) => <EmployeeAccessRow key={user._id} user={user} banks={banks} onRoleUpdate={onRoleUpdate} />)}</tbody></table></div> : <p className="empty-state">No verified customer accounts are available to assign.</p>}</section>;
+function AdminEmployeeAccess({ users, banks, currentUserId, onRoleUpdate }) {
+  const eligibleUsers = users.filter((user) => user.isVerified);
+  return <section className="panel employee-access-panel"><PanelHeading eyebrow="STAFF ACCESS" title="User roles and bank assignments" icon={<UsersRound size={22} />} /><p>Change verified account roles and assign employees to a bank and sub-branch. The Finance Manager email must match an assigned employee login.</p>{eligibleUsers.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>User</th><th>Role</th><th>Bank and sub-branch</th><th>Assignment</th></tr></thead><tbody>{eligibleUsers.map((user) => <EmployeeAccessRow key={user._id} user={user} banks={banks} currentUserId={currentUserId} onRoleUpdate={onRoleUpdate} />)}</tbody></table></div> : <p className="empty-state">No verified user accounts are available.</p>}</section>;
 }
 
-function EmployeeAccessRow({ user, banks, onRoleUpdate }) {
+function EmployeeAccessRow({ user, banks, currentUserId, onRoleUpdate }) {
   const [role, setRole] = useState(user.role);
   const [bankId, setBankId] = useState(user.bankId || '');
   const [branchId, setBranchId] = useState(user.branchId || '');
@@ -370,9 +370,9 @@ function EmployeeAccessRow({ user, banks, onRoleUpdate }) {
   async function saveRole(nextRole) {
     setSaving(true);
     setMessage('');
-    const updates = nextRole === 'user'
-      ? { role: nextRole, bankId: null, branchId: null }
-      : { role: nextRole };
+    const updates = nextRole === 'employee'
+      ? { role: nextRole }
+      : { role: nextRole, bankId: null, branchId: null };
     const saved = await onRoleUpdate(user._id, updates);
     if (saved) {
       setRole(nextRole);
@@ -396,7 +396,7 @@ function EmployeeAccessRow({ user, banks, onRoleUpdate }) {
     setSaving(false);
   }
 
-  return <tr><td><strong>{user.name}</strong><br /><small>{user.email}</small></td><td><select value={role} onChange={(event) => saveRole(event.target.value)} disabled={saving} aria-label={`Access role for ${user.name}`}><option value="user">Customer</option><option value="employee">Employee</option></select></td><td>{role === 'employee' ? <div className="employee-assignment-form"><select value={bankId} onChange={(event) => { setBankId(event.target.value); setBranchId(''); }} required disabled={saving}><option value="">Select bank</option>{banks.map((bank) => <option key={bank._id} value={bank._id}>{bank.bankName}</option>)}</select><select value={branchId} onChange={(event) => setBranchId(event.target.value)} required disabled={saving || !selectedBank?.branches.length}><option value="">Select sub-branch</option>{selectedBank?.branches.map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName}</option>)}</select></div> : 'Not assigned'}</td><td>{role === 'employee' ? <button className="manage-button" type="button" onClick={saveAssignment} disabled={saving || !bankId || !branchId}>{saving ? 'Saving...' : 'Assign'}</button> : 'Customer access'}{message && <small className="employee-access-message">{message}</small>}</td></tr>;
+  return <tr><td><strong>{user.name}</strong><br /><small>{user.email}</small></td><td><select value={role} onChange={(event) => saveRole(event.target.value)} disabled={saving || user._id === currentUserId} aria-label={`Access role for ${user.name}`}><option value="user">Customer</option><option value="employee">Employee</option><option value="admin">Administrator</option></select></td><td>{role === 'employee' ? <div className="employee-assignment-form"><select value={bankId} onChange={(event) => { setBankId(event.target.value); setBranchId(''); }} required disabled={saving}><option value="">Select bank</option>{banks.map((bank) => <option key={bank._id} value={bank._id}>{bank.bankName}</option>)}</select><select value={branchId} onChange={(event) => setBranchId(event.target.value)} required disabled={saving || !selectedBank?.branches.length}><option value="">Select sub-branch</option>{selectedBank?.branches.map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName}</option>)}</select></div> : 'Not assigned'}</td><td>{role === 'employee' ? <button className="manage-button" type="button" onClick={saveAssignment} disabled={saving || !bankId || !branchId}>{saving ? 'Saving...' : 'Assign'}</button> : role === 'admin' ? 'Administrator access' : 'Customer access'}{message && <small className="employee-access-message">{message}</small>}</td></tr>;
 }
 
 function Sidebar({ profile, section, setSection, open, setOpen, onLogout }) {
@@ -443,6 +443,9 @@ function ManagementModal({ open, onClose, title, children }) {
 function AdminBankDashboard({ banks, loanApplications, token, onCreated }) {
   const [form, setForm] = useState(emptyBankForm());
   const [notice, setNotice] = useState({ type: '', text: '' });
+  const [bankStaff, setBankStaff] = useState([]);
+  const [bankStaffLoading, setBankStaffLoading] = useState(false);
+  const [bankStaffError, setBankStaffError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [bankModalOpen, setBankModalOpen] = useState(false);
   const [bankSearch, setBankSearch] = useState('');
@@ -486,6 +489,34 @@ function AdminBankDashboard({ banks, loanApplications, token, onCreated }) {
   const activeBranch = activeBank?.branches.find((branch) => branch._id === selectedBranchId) || activeBank?.branches[0] || null;
   const bankPageCount = Math.max(1, Math.ceil(searchableBanks.length / BANKS_PER_PAGE));
   const visibleBanks = searchableBanks.slice((bankPage - 1) * BANKS_PER_PAGE, bankPage * BANKS_PER_PAGE);
+
+  useEffect(() => {
+    if (!activeBank) {
+      setBankStaff([]);
+      setBankStaffError('');
+      return undefined;
+    }
+
+    let current = true;
+    setBankStaffLoading(true);
+    setBankStaffError('');
+    const loadStaff = async () => {
+      const params = { bankId: activeBank._id, role: 'employee', limit: 100, sortBy: 'name', sortOrder: 'asc' };
+      const firstPage = await getUsers(token, { ...params, page: 1 });
+      const remainingPages = await Promise.all(
+        Array.from({ length: Math.max(0, firstPage.pagination.totalPages - 1) }, (_, index) =>
+          getUsers(token, { ...params, page: index + 2 }))
+      );
+      return [firstPage, ...remainingPages].flatMap((page) => page.users);
+    };
+
+    loadStaff()
+      .then((staff) => { if (current) setBankStaff(staff); })
+      .catch((error) => { if (current) setBankStaffError(error.message); })
+      .finally(() => { if (current) setBankStaffLoading(false); });
+
+    return () => { current = false; };
+  }, [activeBank?._id, token]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -575,6 +606,14 @@ function AdminBankDashboard({ banks, loanApplications, token, onCreated }) {
             </div>
             <div className="bank-leadership-heading">Leadership and departments</div>
             <div className="bank-leadership">{leadershipFields.map((field) => <div key={field.key}><small>{field.label}</small><strong>{field.key === 'financeManager' ? `${activeBank.leadership.financeManager.name} · ${activeBank.leadership.financeManager.email}` : activeBank.leadership[field.key]}</strong></div>)}</div>
+            <div className="bank-leadership-heading">Assigned bank staff <span className="bank-staff-count">{bankStaff.length}</span></div>
+            {bankStaffLoading ? <p className="empty-state" role="status">Loading assigned staff...</p>
+              : bankStaffError ? <p className="bank-staff-error" role="alert">{bankStaffError}</p>
+                : bankStaff.length ? <div className="user-table-wrap"><table className="user-table bank-staff-table"><thead><tr><th>Staff member</th><th>Sub-branch</th><th>Account status</th></tr></thead><tbody>{bankStaff.map((staff) => {
+                  const staffBranch = activeBank.branches.find((branch) => String(branch._id) === String(staff.branchId));
+                  return <tr key={staff._id}><td><strong>{staff.name}</strong><br /><small>{staff.email}</small></td><td>{staffBranch?.branchName || 'Not assigned'}{staffBranch?.branchCode && <><br /><small>{staffBranch.branchCode}</small></>}</td><td><span className={`status ${staff.isVerified ? 'verified' : ''}`}>{staff.isVerified ? 'Verified' : 'Pending verification'}</span></td></tr>;
+                })}</tbody></table></div>
+                  : <p className="empty-state">No employees are assigned to this bank yet.</p>}
             <div className="bank-branch-layout">
               <div className="bank-branch-list">
                 {activeBank.branches.length ? activeBank.branches.map((branch) => {
