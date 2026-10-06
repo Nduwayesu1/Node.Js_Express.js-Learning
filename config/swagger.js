@@ -1,6 +1,8 @@
 const path = require('path');
 const swaggerJSDoc = require('swagger-jsdoc');
 
+const deployedApiUrl = (process.env.API_URL || 'https://node-js-express-js-learning-4.onrender.com').replace(/\/+$/, '');
+
 const swaggerDefinition = {
     openapi: '3.0.0',
     info: {
@@ -10,7 +12,12 @@ const swaggerDefinition = {
     },
     servers: [
         {
-            url: process.env.API_URL || '/'
+            url: 'http://localhost:3000',
+            description: 'Local'
+        },
+        {
+            url: deployedApiUrl,
+            description: 'Deployed'
         }
     ],
     components: {
