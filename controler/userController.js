@@ -272,7 +272,7 @@ async function activateBankMember(req, res) {
             customerBankId: bankAdmin.bankId
         });
         if (!member) return res.status(404).json({ message: 'Bank member not found' });
-        if (member.isApproved && member.isActive !== false) {
+        if (member.isApproved && member.isVerified && member.isActive !== false) {
             return res.status(200).json({ message: 'Bank member is already active', member });
         }
 
