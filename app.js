@@ -8,6 +8,7 @@ const bankRoutes = require('./route/bankRoute');
 const payrollRoutes = require('./route/payrollRoute');
 const loanRoutes = require('./route/loanRoute');
 const guestFeedbackRoutes = require('./route/guestFeedbackRoute');
+const attendanceRoutes = require('./route/attendanceRoute');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,6 +17,7 @@ const configuredOrigins = process.env.CORS_ORIGIN
     : [];
 
 app.use(express.json({
+    limit: '2mb',
     verify: (req, _res, buffer) => {
         req.rawBody = Buffer.from(buffer);
     }
@@ -38,6 +40,7 @@ app.use('/api', bankRoutes);
 app.use('/api', payrollRoutes);
 app.use('/api', loanRoutes);
 app.use('/api', guestFeedbackRoutes);
+app.use('/api', attendanceRoutes);
 app.get('/api-docs.json', (req, res) => {
     res.json(swaggerSpec);
 });

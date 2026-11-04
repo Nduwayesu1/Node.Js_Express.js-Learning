@@ -37,6 +37,12 @@ const userSchema = new Schema(
         otpExpiresAt: {
           type: Date
         },
+        passwordResetOtpHash: {
+          type: String
+        },
+        passwordResetExpiresAt: {
+          type: Date
+        },
       role: {
         type: String,
         enum: ['user', 'admin','employee'],
@@ -74,6 +80,8 @@ userSchema.set('toJSON', {
     delete returnedUser.password;
     delete returnedUser.otpHash;
     delete returnedUser.otpExpiresAt;
+    delete returnedUser.passwordResetOtpHash;
+    delete returnedUser.passwordResetExpiresAt;
     delete returnedUser.__v;
     return returnedUser;
   }

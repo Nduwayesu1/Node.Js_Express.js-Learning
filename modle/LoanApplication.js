@@ -9,7 +9,7 @@ const repaymentSchema = new Schema({
     paymentReference: { type: String, trim: true },
     receiptNumber: { type: String, trim: true },
     paymentChannel: { type: String, trim: true },
-    paymentMode: { type: String, enum: ['staff_recorded', 'virtual_simulation'], default: 'staff_recorded' },
+    paymentMode: { type: String, enum: ['staff_recorded', 'virtual_simulation', 'account_transfer'], default: 'staff_recorded' },
     paidAt: { type: Date, required: true, default: Date.now }
 }, { _id: false });
 

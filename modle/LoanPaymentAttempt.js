@@ -7,11 +7,12 @@ const loanPaymentAttemptSchema = new Schema({
     idempotencyKey: { type: String, required: true },
     reference: { type: String, required: true },
     receiptNumber: { type: String, required: true },
+    accountId: { type: Schema.Types.ObjectId, ref: 'BankAccount' },
     amount: { type: Number, required: true, min: 1, validate: Number.isSafeInteger },
     currency: { type: String, enum: ['RWF'], required: true },
     channel: {
         type: String,
-        enum: ['mtn_mobile_money', 'airtel_money', 'bank_transfer', 'virtual_account'],
+        enum: ['mtn_mobile_money', 'airtel_mobile_money', 'bank_transfer', 'virtual_account', 'bank_account'],
         required: true
     },
     status: { type: String, enum: ['succeeded', 'failed'], required: true },

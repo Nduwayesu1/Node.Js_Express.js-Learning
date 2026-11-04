@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowDownToLine, ArrowRight, AtSign, Bell, Building2, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Clock3, HandCoins, LayoutDashboard, LockKeyhole, LogOut, Menu, MessageSquareText, ShieldCheck, UserPlus, UserRound, UsersRound, Wallet, X } from 'lucide-react';
-import { activateBankMember, activateBankStaff, activateUser, addBankBranch, createBank, createBankAccount, createBankAdmin, createBankMember, createBankStaff, createLoan, createPayrollBatch, deactivateBankMember, deactivateBankStaff, decideLoan, deleteUser, depositToBankAccount, getAssignedBank, getAvailableBanks, getBankAccountTransactions, getBankAccounts, getBankMembers, getBankStaff, getBanks, getFinanceBanks, getGuestFeedback, getLoans, getMyBankAccounts, getPayrollBatches, getPayrollEmployees, getProfile, getRwandaCells, getRwandaDistricts, getRwandaProvinces, getRwandaSectors, getRwandaVillages, getUsers, login, markGuestFeedbackReviewed, markLoanDefaulted, payLoanWithVirtualSimulator, recordLoanRepayment, resendOtp, searchTransferRecipients, submitGuestFeedback, transferBetweenAccounts, updateBankAccountStatus, updateProfile, updateUser, verifyOtp } from './api';
+import { ArrowDownToLine, ArrowRight, AtSign, Bell, Building2, CalendarCheck, Camera, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Clock3, HandCoins, LayoutDashboard, LockKeyhole, LogOut, Menu, MessageSquareText, ShieldCheck, UserPlus, UserRound, UsersRound, Wallet, X } from 'lucide-react';
+import { activateBankMember, activateBankStaff, activateUser, addBankBranch, checkInForAttendance, confirmPasswordReset, createBank, createBankAccount, createBankAdmin, createBankMember, createBankStaff, createLoan, createPayrollBatch, deactivateBankMember, deactivateBankStaff, decideLoan, deleteUser, depositToBankAccount, getAssignedBank, getAttendancePhoto, getAvailableBanks, getBankAccountTransactions, getBankAccounts, getBankAttendance, getBankMembers, getBankStaff, getBanks, getFinanceBanks, getGuestFeedback, getLoans, getMyAttendance, getMyBankAccounts, getPayrollBatches, getPayrollEmployees, getProfile, getRwandaCells, getRwandaDistricts, getRwandaProvinces, getRwandaSectors, getRwandaVillages, getUsers, login, markGuestFeedbackReviewed, markLoanDefaulted, payLoanFromAccount, payLoanWithVirtualSimulator, recordLoanRepayment, requestPasswordReset, resendOtp, searchTransferRecipients, submitGuestFeedback, transferBetweenAccounts, updateBankAccountStatus, updateProfile, updateUser, verifyOtp } from './api';
 import './styles.css';
 
 const initialForm = { email: '', password: '' };
@@ -275,16 +275,39 @@ function App() {
   }
 
   async function handleVirtualLoanPayment(loanId, payment) {
+    let result;
     try {
-      const result = await payLoanWithVirtualSimulator(token, loanId, payment);
-      await refreshLoans();
+      result = await payLoanWithVirtualSimulator(token, loanId, payment);
       setNotice({ type: 'success', text: `${result.payment.receiptNumber} was issued. This is a virtual simulation only; no real funds moved.` });
       recordActivity('A virtual loan repayment was simulated.');
-      return result.payment;
     } catch (error) {
       showError(error);
-      return null;
+      return { status: 'error', message: error.message };
     }
+    try {
+      await refreshLoans();
+    } catch (error) {
+      showError(error);
+    }
+    return result.payment;
+  }
+
+  async function handleAccountLoanPayment(loanId, payment) {
+    let result;
+    try {
+      result = await payLoanFromAccount(token, loanId, payment);
+      setNotice({ type: 'success', text: `${result.payment.receiptNumber} was issued. Your bank account was debited.` });
+      recordActivity('A loan repayment was debited from a customer bank account.');
+    } catch (error) {
+      showError(error);
+      return { status: 'error', message: error.message };
+    }
+    try {
+      await refreshLoans();
+    } catch (error) {
+      showError(error);
+    }
+    return result.payment;
   }
 
   async function handleLoanDefault(loanId) {
@@ -315,7 +338,7 @@ function App() {
   }
 
   if (token && profile) {
-    return <Dashboard profile={profile} users={users} banks={banks} token={token} pagination={pagination} userQuery={userQuery} setUserQuery={setUserQuery} onActivateUser={handleActivateUser} onRoleUpdate={handleRoleUpdate} onUserCreated={handleUserCreated} onBankCreated={handleBankCreated} onRefreshBanks={handleAvailableBanksRefresh} section={section} setSection={setSection} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} form={form} loading={loading} notice={notice} setNotice={setNotice} activityItems={activityItems} setActivityItems={setActivityItems} onActivity={recordActivity} setForm={setForm} onSave={handleProfileSave} onLogout={handleLogout} loanApplications={loanApplications} systemAnnualInterestRate={systemAnnualInterestRate} onLoanApplication={handleLoanApplication} onLoanDecision={handleLoanDecision} onLoanRepayment={handleLoanRepayment} onVirtualLoanPayment={handleVirtualLoanPayment} onLoanDefault={handleLoanDefault} />;
+    return <Dashboard profile={profile} users={users} banks={banks} token={token} pagination={pagination} userQuery={userQuery} setUserQuery={setUserQuery} onActivateUser={handleActivateUser} onRoleUpdate={handleRoleUpdate} onUserCreated={handleUserCreated} onBankCreated={handleBankCreated} onRefreshBanks={handleAvailableBanksRefresh} section={section} setSection={setSection} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} form={form} loading={loading} notice={notice} setNotice={setNotice} activityItems={activityItems} setActivityItems={setActivityItems} onActivity={recordActivity} setForm={setForm} onSave={handleProfileSave} onLogout={handleLogout} loanApplications={loanApplications} systemAnnualInterestRate={systemAnnualInterestRate} onLoanApplication={handleLoanApplication} onLoanDecision={handleLoanDecision} onLoanRepayment={handleLoanRepayment} onVirtualLoanPayment={handleVirtualLoanPayment} onAccountLoanPayment={handleAccountLoanPayment} onLoanDefault={handleLoanDefault} />;
   }
 
   if (view === 'guest') {
@@ -337,14 +360,41 @@ function App() {
         <section className="auth-card">
           {view === 'otp'
             ? <OtpForm otp={otp} setOtp={setOtp} email={form.email} loading={loading} notice={notice} onSubmit={handleVerify} onResend={async () => { setLoading(true); try { await resendOtp(form.email); setNotice({ type: 'success', text: 'A new verification code has been sent.' }); } catch (error) { showError(error); } finally { setLoading(false); } }} onBack={() => setView('login')} />
-            : <AuthForm form={form} loading={loading} notice={notice} onChange={updateField} onSubmit={handleSubmit} onVerify={() => setView('otp')} onGuest={() => { setNotice({ type: '', text: '' }); setView('guest'); }} />}
+            : view === 'reset'
+              ? <PasswordResetForm initialEmail={form.email} onRequest={async (email) => {
+                setLoading(true);
+                try {
+                  const result = await requestPasswordReset(email);
+                  setNotice({ type: 'success', text: result.message });
+                  return true;
+                } catch (error) {
+                  showError(error);
+                  return false;
+                } finally {
+                  setLoading(false);
+                }
+              }} onConfirm={async (email, resetOtp, newPassword) => {
+                setLoading(true);
+                try {
+                  const result = await confirmPasswordReset({ email, otp: resetOtp, newPassword });
+                  setView('login');
+                  setNotice({ type: 'success', text: result.message });
+                  return true;
+                } catch (error) {
+                  showError(error);
+                  return false;
+                } finally {
+                  setLoading(false);
+                }
+              }} loading={loading} notice={notice} onBack={() => { setNotice({ type: '', text: '' }); setView('login'); }} />
+              : <AuthForm form={form} loading={loading} notice={notice} onChange={updateField} onSubmit={handleSubmit} onVerify={() => setView('otp')} onForgot={() => { setNotice({ type: '', text: '' }); setView('reset'); }} onGuest={() => { setNotice({ type: '', text: '' }); setView('guest'); }} />}
         </section>
       </section>
     </main>
   );
 }
 
-function AuthForm({ form, loading, notice, onChange, onSubmit, onVerify, onGuest }) {
+function AuthForm({ form, loading, notice, onChange, onSubmit, onVerify, onForgot, onGuest }) {
   return <>
     <div className="card-heading"><span className="eyebrow">ACCOUNT PORTAL</span><h2>Welcome back</h2><p>Sign in to continue your journey.</p></div>
     <form onSubmit={onSubmit} className="form-stack">
@@ -354,8 +404,45 @@ function AuthForm({ form, loading, notice, onChange, onSubmit, onVerify, onGuest
       <button className="primary-button" disabled={loading}>{loading ? 'Working...' : 'Sign in'} <ArrowRight size={17} /></button>
     </form>
     <div className="card-footer">Need a member account? Contact your Bank Admin.</div>
+    <button className="quiet-button" type="button" onClick={onForgot}>Forgot password?</button>
     <button className="quiet-button" onClick={onVerify}>I already have an OTP</button>
     <button className="quiet-button" type="button" onClick={onGuest}>Continue as Guest · View demo & send feedback</button>
+  </>;
+}
+
+function PasswordResetForm({ initialEmail, onRequest, onConfirm, loading, notice, onBack }) {
+  const [email, setEmail] = useState(initialEmail || '');
+  const [otp, setOtp] = useState('');
+  const [password, setPassword] = useState('');
+  const [requested, setRequested] = useState(false);
+
+  async function requestCode(event) {
+    event.preventDefault();
+    if (await onRequest(email)) setRequested(true);
+  }
+
+  async function resetPassword(event) {
+    event.preventDefault();
+    if (await onConfirm(email, otp, password)) {
+      setOtp('');
+      setPassword('');
+    }
+  }
+
+  return <>
+    <div className="card-heading"><span className="eyebrow">ACCOUNT RECOVERY</span><h2>Reset your password</h2><p>We will send a one-time code to your verified email address.</p></div>
+    {!requested ? <form onSubmit={requestCode} className="form-stack">
+      <Field icon={<AtSign size={17} />} name="reset-email" type="email" placeholder="Email address" value={email} onChange={(event) => setEmail(event.target.value)} />
+      {notice.text && <Notice notice={notice} />}
+      <button className="primary-button" disabled={loading}>{loading ? 'Sending...' : 'Send reset code'} <ArrowRight size={17} /></button>
+    </form> : <form onSubmit={resetPassword} className="form-stack">
+      <p className="form-disclaimer">If the verified account exists, a reset code will be sent to {email}.</p>
+      <label>Email reset code<input className="bank-text-input" inputMode="numeric" pattern="[0-9]{6}" maxLength="6" value={otp} onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))} required /></label>
+      <label>New password<input className="bank-text-input" type="password" autoComplete="new-password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+      {notice.text && <Notice notice={notice} />}
+      <button className="primary-button" disabled={loading}>{loading ? 'Resetting...' : 'Reset password'} <ArrowRight size={17} /></button>
+    </form>}
+    <button className="quiet-button" type="button" disabled={loading} onClick={onBack}>Back to sign in</button>
   </>;
 }
 
@@ -370,6 +457,7 @@ function GuestDashboard({ onBack }) {
   const [form, setForm] = useState({ category: 'general', rating: '5', message: '' });
   const [notice, setNotice] = useState({ type: '', text: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [previewSection, setPreviewSection] = useState('overview');
   const months = recentMonths().map((month, index) => ({ label: month.label, value: [24, 31, 28, 36, 42, 48][index] }));
   const loanTypes = [
     { label: 'Personal', value: 42 },
@@ -407,6 +495,7 @@ function GuestDashboard({ onBack }) {
         <ReportLineChart title="Demo loan applications" subtitle="Illustrative monthly trend · sample figures" values={months} />
         <ReportBarChart title="Demo applications by loan category" subtitle="Illustrative counts · sample figures" values={loanTypes} />
       </div>
+      <section className="panel guest-read-only-panel"><PanelHeading eyebrow="EXPLORE THE SYSTEM" title="Read-only feature preview" icon={<LayoutDashboard size={22} />} /><p>Browse fictional examples of the system’s main workspaces. Guest mode cannot access or change real records, submit payments, or manage accounts.</p><nav className="guest-feature-tabs" aria-label="Demo feature pages">{[['overview', 'Overview'], ['loans', 'Loans'], ['accounts', 'Accounts'], ['payments', 'Payments'], ['people', 'HR & attendance'], ['payroll', 'Finance & payroll'], ['reports', 'Reports'], ['administration', 'Administration']].map(([key, label]) => <button key={key} type="button" className={previewSection === key ? 'active' : ''} aria-pressed={previewSection === key} onClick={() => setPreviewSection(key)}>{label}</button>)}</nav><GuestReadOnlyFeatures section={previewSection} /></section>
       <section className="panel guest-feedback-panel"><PanelHeading eyebrow="HELP US IMPROVE" title="Share feedback" icon={<MessageSquareText size={22} />} /><p>Your feedback is stored without your name or email. Please do not include sensitive account or identity details.</p><form className="bank-form" onSubmit={handleSubmit}>
         <label htmlFor="guest-feedback-category">What is your feedback about?</label><select className="bank-text-input" id="guest-feedback-category" value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}><option value="general">General</option><option value="dashboard">Dashboard</option><option value="loan-process">Loan process</option><option value="payments">Payments</option><option value="accessibility">Accessibility</option></select>
         <label htmlFor="guest-feedback-rating">Rating</label><select className="bank-text-input" id="guest-feedback-rating" value={form.rating} onChange={(event) => setForm({ ...form, rating: event.target.value })}><option value="5">5 — Excellent</option><option value="4">4 — Good</option><option value="3">3 — Fair</option><option value="2">2 — Needs improvement</option><option value="1">1 — Poor</option></select>
@@ -418,6 +507,61 @@ function GuestDashboard({ onBack }) {
   </main>;
 }
 
+function GuestReadOnlyFeatures({ section }) {
+  const examples = {
+    overview: {
+      title: 'Role-based dashboards',
+      description: 'Customers, Bank Admins, sub-branch managers, HR, finance, and system administrators see different scoped workspaces.',
+      headers: ['Workspace', 'Example view', 'Access'],
+      rows: [['Customer', 'Loan status and owned accounts', 'Own records'], ['Bank Admin', 'Bank-wide staff and loan reports', 'Assigned bank'], ['HR Manager', 'Staff directory and attendance', 'Assigned bank']]
+    },
+    loans: {
+      title: 'Loan lifecycle',
+      description: 'Applications move through review, approval or decline, disbursement, repayment, and closure.',
+      headers: ['Fictional applicant', 'Loan type', 'Status'],
+      rows: [['Demo Applicant A', 'Salary loan · RWF 600,000', 'Under review'], ['Demo Applicant B', 'Education loan · RWF 1,200,000', 'Approved'], ['Demo Applicant C', 'Business loan · RWF 2,000,000', 'Repaid']]
+    },
+    accounts: {
+      title: 'Bank accounts and members',
+      description: 'Customers view their accounts and activity; bank staff review scoped accounts, members, and sub-branches.',
+      headers: ['Fictional record', 'Workspace', 'Access example'],
+      rows: [['•••• •••• 1001', 'Customer account', 'Owner only'], ['Demo Member A', 'Sub-branch member list', 'Assigned staff'], ['Demo Sub-branch', 'Branch directory', 'Assigned bank']]
+    },
+    payments: {
+      title: 'Deposits, transfers, and loan repayments',
+      description: 'Customers can review payment history and pay approved loans. Guest mode never executes or simulates a payment.',
+      headers: ['Fictional payment', 'Channel', 'Example status'],
+      rows: [['Demo deposit', 'Mobile money', 'Confirmed example'], ['Demo transfer', 'Bank account', 'Completed example'], ['Demo loan payment', 'Own account', 'Receipt example']]
+    },
+    people: {
+      title: 'HR and attendance',
+      description: 'HR reviews staff status and bank-scoped attendance. Employees may capture a selfie with consent; no facial recognition is performed.',
+      headers: ['Fictional employee', 'Role', 'Attendance'],
+      rows: [['Demo Employee A', 'Sub-branch Manager', 'Present · 08:04'], ['Demo Employee B', 'HR Manager', 'Present · 08:11'], ['Demo Employee C', 'Finance Manager', 'Not recorded']]
+    },
+    payroll: {
+      title: 'Finance and payroll',
+      description: 'Finance staff review bank-scoped employee rosters, payroll batches, and processing summaries.',
+      headers: ['Fictional batch', 'Employees', 'Example status'],
+      rows: [['DEMO-PAY-001', '24', 'Processed'], ['DEMO-PAY-002', '18', 'Awaiting review'], ['DEMO-PAY-003', '12', 'Draft']]
+    },
+    reports: {
+      title: 'Reports and pagination',
+      description: 'Dashboards summarize loan performance, account activity, employee headcount, attendance, and operational reports.',
+      headers: ['Fictional report', 'Example metric', 'Scope'],
+      rows: [['Loan portfolio', 'RWF 840M disbursed', 'Assigned bank'], ['Attendance', '82% checked in today', 'Assigned bank'], ['Loan performance', '68% approval rate', 'Demo figures']]
+    },
+    administration: {
+      title: 'Administration and access controls',
+      description: 'System Admins provision Bank Admins; Bank Admins manage staff and branches. Guest mode provides no administrative actions.',
+      headers: ['Fictional control', 'Owner', 'Guest access'],
+      rows: [['Create Bank Admin', 'System Admin', 'View only'], ['Assign Sub-branch Manager', 'Bank Admin', 'View only'], ['Activate staff account', 'Bank Admin', 'View only']]
+    }
+  };
+  const page = examples[section] || examples.overview;
+  return <div className="guest-feature-preview"><h3>{page.title}</h3><p>{page.description}</p><div className="user-table-wrap"><table className="user-table"><thead><tr>{page.headers.map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{page.rows.map((row) => <tr key={row[0]}>{row.map((cell) => <td key={cell}>{cell}</td>)}</tr>)}</tbody></table></div><small>Fictional demonstration data · no actions available</small></div>;
+}
+
 function Field({ icon, ...props }) { return <label className="field"><span>{icon}</span><input {...props} required /></label>; }
 function Notice({ notice }) {
   return <div className={`notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'} aria-live={notice.type === 'error' ? 'assertive' : 'polite'}>
@@ -425,7 +569,7 @@ function Notice({ notice }) {
   </div>;
 }
 
-function Dashboard({ profile, users, banks, token, pagination, userQuery, setUserQuery, onActivateUser, onRoleUpdate, onUserCreated, onBankCreated, onRefreshBanks, section, setSection, sidebarOpen, setSidebarOpen, form, loading, notice, setNotice, activityItems, setActivityItems, onActivity, setForm, onSave, onLogout, loanApplications, systemAnnualInterestRate, onLoanApplication, onLoanDecision, onLoanRepayment, onVirtualLoanPayment, onLoanDefault }) {
+function Dashboard({ profile, users, banks, token, pagination, userQuery, setUserQuery, onActivateUser, onRoleUpdate, onUserCreated, onBankCreated, onRefreshBanks, section, setSection, sidebarOpen, setSidebarOpen, form, loading, notice, setNotice, activityItems, setActivityItems, onActivity, setForm, onSave, onLogout, loanApplications, systemAnnualInterestRate, onLoanApplication, onLoanDecision, onLoanRepayment, onVirtualLoanPayment, onAccountLoanPayment, onLoanDefault }) {
   const firstName = profile.name?.split(' ')[0] || 'there';
   const manager = profile.role === 'employee';
   const staffRole = profile.staffRole || 'branch_manager';
@@ -451,13 +595,14 @@ function Dashboard({ profile, users, banks, token, pagination, userQuery, setUse
       {manager && staffRole === 'bank_admin' && section === 'staff' && <BankStaffAdminDashboard token={token} banks={banks} onActivity={onActivity} />}
       {manager && staffRole === 'bank_admin' && section === 'overview' && <BankAdminReportDashboard banks={banks} token={token} loanApplications={loanApplications} />}
       {manager && staffRole === 'hr_manager' && section === 'hr-dashboard' && <HRDashboard token={token} />}
+      {manager && section === 'attendance' && <EmployeeAttendanceDashboard token={token} />}
       {manager && staffRole === 'finance_manager' && section === 'directory' && <BankStaffDirectoryDashboard token={token} />}
       {manager && staffRole === 'general_manager' && section === 'overview' && <GeneralManagerDashboard banks={banks} token={token} loanApplications={loanApplications} />}
       {manager && staffRole === 'finance_manager' && section === 'payroll' && <FinancePayrollDashboard banks={banks} token={token} onActivity={onActivity} />}
       {manager && ['bank_admin', 'branch_manager', 'accounts_manager'].includes(staffRole) && section === 'ledger' && <BankStaffDashboard banks={banks} token={token} profile={profile} canManageAccounts={staffRole === 'accounts_manager'} onActivity={onActivity} />}
       {manager && ['bank_admin', 'branch_manager'].includes(staffRole) && section === 'applications' && <ManagerDashboard applications={loanApplications} systemAnnualInterestRate={systemAnnualInterestRate} section={section} notice={notice} onDecision={onLoanDecision} onRepayment={onLoanRepayment} onDefault={onLoanDefault} />}
       {manager && staffRole === 'general_manager' && section === 'applications' && <ManagerDashboard applications={loanApplications} systemAnnualInterestRate={systemAnnualInterestRate} section={section} notice={{ type: '', text: '' }} readOnly onDecision={onLoanDecision} onRepayment={onLoanRepayment} onDefault={onLoanDefault} />}
-        {profile.role === 'user' && section !== 'profile' && <UserDashboard profile={profile} banks={banks} token={token} systemAnnualInterestRate={systemAnnualInterestRate} onRefreshBanks={onRefreshBanks} applications={loanApplications.filter((application) => application.applicant === profile._id || application.applicant?._id === profile._id)} notice={notice} setNotice={setNotice} onLoanApplication={onLoanApplication} onVirtualLoanPayment={onVirtualLoanPayment} onActivity={onActivity} />}
+        {profile.role === 'user' && section !== 'profile' && <UserDashboard profile={profile} banks={banks} token={token} systemAnnualInterestRate={systemAnnualInterestRate} onRefreshBanks={onRefreshBanks} applications={loanApplications.filter((application) => application.applicant === profile._id || application.applicant?._id === profile._id)} notice={notice} setNotice={setNotice} onLoanApplication={onLoanApplication} onVirtualLoanPayment={onVirtualLoanPayment} onAccountLoanPayment={onAccountLoanPayment} onActivity={onActivity} />}
       {section === 'profile' && <ProfileDashboard profile={profile} form={form} loading={loading} notice={notice} setForm={setForm} onSave={onSave} />}
     </section></div>
   </main>;
@@ -567,7 +712,7 @@ function EmployeeAccessRow({ user, banks, currentUserId, onRoleUpdate }) {
 function Sidebar({ profile, staffRole, section, setSection, open, setOpen, onLogout }) {
   const go = (next) => { setSection(next); setOpen(false); };
   const navigation = profile.role === 'employee'
-    ? []
+    ? [{ section: 'attendance', label: 'My attendance', icon: CalendarCheck }]
     : [{ section: 'overview', label: 'Dashboard', icon: LayoutDashboard }];
   if (profile.role === 'user') navigation.push(
     { section: 'deposit', label: 'Make a deposit', icon: ArrowDownToLine },
@@ -1419,6 +1564,10 @@ function BankStaffAdminDashboard({ token, banks, onActivity }) {
 function HRDashboard({ token }) {
   const [staff, setStaff] = useState([]);
   const [members, setMembers] = useState([]);
+  const [attendance, setAttendance] = useState([]);
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [photoError, setPhotoError] = useState('');
+  const [loadingPhotoId, setLoadingPhotoId] = useState('');
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [branchFilter, setBranchFilter] = useState('');
@@ -1428,17 +1577,35 @@ function HRDashboard({ token }) {
 
   useEffect(() => {
     let active = true;
-    Promise.all([getBankStaff(token), getBankMembers(token)])
-      .then(([staffResult, memberResult]) => {
+    Promise.all([getBankStaff(token), getBankMembers(token), getBankAttendance(token)])
+      .then(([staffResult, memberResult, attendanceResult]) => {
         if (!active) return;
         setStaff(staffResult.staff || []);
         setMembers(memberResult.members || []);
+        setAttendance(attendanceResult.attendance || []);
         setError('');
       })
       .catch((loadError) => { if (active) setError(loadError.message); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [token]);
+
+  useEffect(() => () => {
+    if (photoUrl) URL.revokeObjectURL(photoUrl);
+  }, [photoUrl]);
+
+  async function showAttendancePhoto(record) {
+    setPhotoError('');
+    setLoadingPhotoId(record._id);
+    try {
+      const photo = await getAttendancePhoto(token, record._id);
+      setPhotoUrl(URL.createObjectURL(photo));
+    } catch (loadError) {
+      setPhotoError(loadError.message);
+    } finally {
+      setLoadingPhotoId('');
+    }
+  }
 
   const activeStaff = staff.filter((employee) => employee.isVerified && employee.isActive !== false);
   const pendingStaff = staff.filter((employee) => !employee.isVerified && employee.isActive !== false);
@@ -1464,6 +1631,13 @@ function HRDashboard({ token }) {
   });
   const branches = [...new Map(staff.filter((employee) => employee.branch?._id)
     .map((employee) => [String(employee.branch._id), employee.branch])).values()];
+  const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Kigali', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const todayAttendance = attendance.filter((record) => record.dayKey === todayKey).length;
+  const attendanceDailyBreakdown = [...new Set(attendance.map((record) => record.dayKey))]
+    .sort((left, right) => right.localeCompare(left))
+    .slice(0, 7)
+    .reverse()
+    .map((dayKey) => ({ label: dayKey.slice(5), value: attendance.filter((record) => record.dayKey === dayKey).length }));
 
   return <>
     {!loading && <ReportCards items={[
@@ -1471,13 +1645,22 @@ function HRDashboard({ token }) {
       { label: 'Active employees', value: activeStaff.length, detail: 'Verified and enabled' },
       { label: 'Verification pending', value: pendingStaff.length, detail: 'Awaiting activation' },
       { label: 'Deactivated', value: deactivatedStaff.length, detail: 'Access disabled' },
-      { label: 'Active customer members', value: activeMembers.length, detail: 'Bank-wide workforce directory context' }
+      { label: 'Active customer members', value: activeMembers.length, detail: 'Bank-wide workforce directory context' },
+      { label: 'Checked in today', value: todayAttendance, detail: 'Employee selfie check-ins · Kigali time' }
     ]} />}
     {error && <p className="notice error" role="alert">{error}</p>}
     <div className="financial-chart-grid hr-report-charts">
       <ReportBarChart title="Employees by role" subtitle="Bank-wide role distribution" values={roleBreakdown} />
       <ReportBarChart title="Employees by sub-branch" subtitle="Assigned staff headcount" values={branchBreakdown} />
+      <ReportLineChart title="Recent attendance" subtitle="Daily check-ins · last seven recorded dates" values={attendanceDailyBreakdown} />
     </div>
+    <section className="bank-panel transaction-panel">
+      <div className="bank-panel-heading"><div><span className="eyebrow">ATTENDANCE</span><h2>Employee check-ins</h2></div><CalendarCheck size={22} /></div>
+      <p className="form-disclaimer">Attendance photos are encrypted at rest and visible only to HR Managers assigned to this bank. Photos are evidence only; the system does not use facial recognition.</p>
+      {photoError && <p className="notice error" role="alert">{photoError}</p>}
+      {attendance.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Employee</th><th>Sub-branch</th><th>Date</th><th>Check-in</th><th>Attendance evidence</th></tr></thead><PaginatedRows rows={attendance} colSpan={5} renderRow={(record) => <tr key={record._id}><td><strong>{record.employee?.name || 'Employee'}</strong><br /><small>{record.employee?.email || ''}</small></td><td>{record.branchName || 'Unassigned'}</td><td>{record.dayKey}</td><td>{new Date(record.checkInAt).toLocaleTimeString()}</td><td><button className="manage-button" type="button" disabled={loadingPhotoId === record._id} onClick={() => showAttendancePhoto(record)}>{loadingPhotoId === record._id ? 'Loading...' : 'View consented selfie'}</button></td></tr>} /></table></div> : !loading && <p className="empty-state">No employee check-ins in the past 30 days.</p>}
+    </section>
+    {photoUrl && <div className="modal-backdrop" role="presentation" onClick={() => setPhotoUrl('')}><section className="modal-card" role="dialog" aria-modal="true" aria-label="Attendance selfie" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">HR-ONLY ATTENDANCE EVIDENCE</span><h2>Employee check-in selfie</h2></div><button className="icon-button" type="button" aria-label="Close selfie" onClick={() => setPhotoUrl('')}><X size={18} /></button></div><img className="attendance-photo-preview" src={photoUrl} alt="Employee attendance selfie" /></section></div>}
     <section className="bank-panel transaction-panel">
       <div className="bank-panel-heading"><div><span className="eyebrow">PEOPLE OPERATIONS</span><h2>Employee directory</h2></div><UsersRound size={22} /></div>
       <p className="form-disclaimer">HR view-only workspace: review staff role, sub-branch assignment, account access status, and account creation date. Bank Admins manage employee access and assignments.</p>
@@ -1489,6 +1672,120 @@ function HRDashboard({ token }) {
       </div>
       {loading ? <p className="empty-state">Loading HR dashboard…</p> : visibleStaff.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Employee</th><th>Role</th><th>Sub-branch</th><th>Account status</th><th>Account created</th></tr></thead><PaginatedRows rows={visibleStaff} colSpan={5} renderRow={(employee) => <tr key={employee._id}><td><strong>{employee.name}</strong><br /><small>{employee.email}</small></td><td>{staffRoleName(employee.staffRole)}</td><td>{employee.branch?.branchName || 'Not assigned'}{employee.branch?.branchCode && <><br /><small>{employee.branch.branchCode}</small></>}</td><td><span className={`status ${employee.isVerified && employee.isActive !== false ? 'verified' : ''}`}>{employee.isActive === false ? 'Deactivated' : employee.isVerified ? 'Active' : 'Verification pending'}</span></td><td>{new Date(employee.createdAt).toLocaleDateString()}</td></tr>} /></table></div> : !error && <p className="empty-state">No employees match the selected filters.</p>}
     </section>
+  </>;
+}
+
+function EmployeeAttendanceDashboard({ token }) {
+  const [attendance, setAttendance] = useState([]);
+  const [consent, setConsent] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [photo, setPhoto] = useState('');
+  const [stream, setStream] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState({ type: '', text: '' });
+  const videoRef = useRef(null);
+  const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Kigali', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const checkedInToday = attendance.some((record) => record.dayKey === todayKey);
+
+  useEffect(() => {
+    let active = true;
+    getMyAttendance(token)
+      .then(({ attendance: records }) => { if (active) setAttendance(records || []); })
+      .catch((error) => { if (active) setNotice({ type: 'error', text: error.message }); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [token]);
+
+  useEffect(() => {
+    if (videoRef.current && stream) videoRef.current.srcObject = stream;
+  }, [stream]);
+
+  useEffect(() => () => stream?.getTracks().forEach((track) => track.stop()), [stream]);
+
+  async function startCamera() {
+    setNotice({ type: '', text: '' });
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setNotice({ type: 'error', text: 'Camera access is not available in this browser. Use a secure HTTPS connection or ask HR for help.' });
+      return;
+    }
+    try {
+      const cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+      setStream(cameraStream);
+      setCameraOpen(true);
+      setPhoto('');
+    } catch (error) {
+      setNotice({ type: 'error', text: error.name === 'NotAllowedError' ? 'Camera permission was denied. Allow camera access to take attendance.' : 'Unable to start the camera. Check that it is connected and not in use.' });
+    }
+  }
+
+  function captureSelfie() {
+    const video = videoRef.current;
+    if (!video?.videoWidth || !video.videoHeight) {
+      setNotice({ type: 'error', text: 'The camera is not ready yet. Wait for the preview and try again.' });
+      return;
+    }
+    const canvas = document.createElement('canvas');
+    const scale = Math.min(1, 640 / video.videoWidth);
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const context = canvas.getContext('2d');
+    if (!context) {
+      setNotice({ type: 'error', text: 'Unable to capture an image in this browser.' });
+      return;
+    }
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const capturedPhoto = canvas.toDataURL('image/jpeg', 0.65);
+    if (capturedPhoto.length > 900 * 1024) {
+      setNotice({ type: 'error', text: 'The selfie is too large to upload. Capture it again in better lighting.' });
+      return;
+    }
+    setPhoto(capturedPhoto);
+    stream?.getTracks().forEach((track) => track.stop());
+    setStream(null);
+    setCameraOpen(false);
+    setNotice({ type: '', text: '' });
+  }
+
+  async function submitCheckIn(event) {
+    event.preventDefault();
+    if (!consent || !photo) {
+      setNotice({ type: 'error', text: 'Give consent and capture a selfie before recording attendance.' });
+      return;
+    }
+    setSubmitting(true);
+    setNotice({ type: '', text: '' });
+    try {
+      const result = await checkInForAttendance(token, { photoConsent: true, photo });
+      setAttendance((records) => [result.attendance, ...records]);
+      setPhoto('');
+      setConsent(false);
+      setNotice({ type: 'success', text: 'Attendance recorded. Your selfie is encrypted and available only to HR for attendance review.' });
+    } catch (error) {
+      setNotice({ type: 'error', text: error.message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return <>
+    <ReportCards items={[
+      { label: 'Today', value: checkedInToday ? 'Checked in' : 'Not checked in', detail: 'Rwanda local date' },
+      { label: 'Recorded days', value: attendance.length, detail: 'Most recent 90 records' }
+    ]} />
+    <section className="bank-panel transaction-panel">
+      <div className="bank-panel-heading"><div><span className="eyebrow">EMPLOYEE ATTENDANCE</span><h2>Record today’s check-in</h2></div><Camera size={22} /></div>
+      <p className="form-disclaimer">Your selfie is stored encrypted and can be viewed only by HR Managers at your bank. It is used as attendance evidence only; no facial recognition or identity matching is performed. If you do not consent to photo storage, contact your HR Manager for the bank’s alternative attendance process.</p>
+      {checkedInToday ? <p className="notice success" role="status">Attendance already recorded for today.</p> : <form className="bank-form" onSubmit={submitCheckIn}>
+        <label className="check-row"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} required /> I consent to capturing and securely storing this selfie as attendance evidence, accessible to my bank’s HR Manager.</label>
+        {cameraOpen && <div className="attendance-camera"><video ref={videoRef} autoPlay playsInline aria-label="Live selfie camera preview" /><button className="bank-button" type="button" onClick={captureSelfie}>Capture selfie</button></div>}
+        {!cameraOpen && !photo && <button className="bank-button" type="button" disabled={!consent || submitting} onClick={startCamera}><Camera size={17} /> Start camera</button>}
+        {photo && <div className="attendance-camera"><img className="attendance-photo-preview" src={photo} alt="Selfie preview before attendance submission" /><button className="manage-button" type="button" onClick={() => { setPhoto(''); startCamera(); }}>Retake selfie</button></div>}
+        {notice.text && <Notice notice={notice} />}
+        <button className="bank-button" type="submit" disabled={!consent || !photo || submitting}>{submitting ? 'Recording attendance...' : 'Record attendance'}</button>
+      </form>}
+    </section>
+    <section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">HISTORY</span><h2>My attendance</h2></div><CalendarCheck size={22} /></div>{loading ? <p className="empty-state">Loading attendance history...</p> : attendance.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Date</th><th>Check-in time</th><th>Status</th></tr></thead><PaginatedRows rows={attendance} colSpan={3} renderRow={(record) => <tr key={record._id}><td>{record.dayKey}</td><td>{new Date(record.checkInAt).toLocaleTimeString()}</td><td><span className="status verified">Present</span></td></tr>} /></table></div> : <p className="empty-state">No attendance has been recorded yet.</p>}</section>
   </>;
 }
 
@@ -1682,7 +1979,7 @@ function LoanApplicationCard({ application, systemAnnualInterestRate, readOnly =
   </tr>;
 }
 
-function UserDashboard({ profile, banks, applications, notice, setNotice, onLoanApplication, onVirtualLoanPayment, onRefreshBanks, onActivity, token, systemAnnualInterestRate }) {
+function UserDashboard({ profile, banks, applications, notice, setNotice, onLoanApplication, onVirtualLoanPayment, onAccountLoanPayment, onRefreshBanks, onActivity, token, systemAnnualInterestRate }) {
   const [depositAmount, setDepositAmount] = useState('');
   const [depositPhoneNumber, setDepositPhoneNumber] = useState('');
   const [depositAccountId, setDepositAccountId] = useState('');
@@ -1702,6 +1999,10 @@ function UserDashboard({ profile, banks, applications, notice, setNotice, onLoan
   const [depositNotice, setDepositNotice] = useState({ type: '', text: '' });
   const [transferNotice, setTransferNotice] = useState({ type: '', text: '' });
   const activeAccounts = bankAccounts.filter((account) => account.status === 'active');
+  const eligibleLoanAccounts = (application) => activeAccounts.filter((account) =>
+    String(account.bankId?._id || account.bankId) === String(application.bank)
+    && String(account.branchId?._id || account.branchId) === String(application.branchId)
+  );
   const balance = activeAccounts.reduce((total, account) => total + Number(account.balance || 0), 0);
   const latestApplications = applications.slice(0, 3);
   const transactions = bankAccounts.flatMap((account) => (account.transactions || []).map((transaction) => ({ ...transaction, accountName: account.accountName, accountNumber: account.accountNumber })))
@@ -1893,43 +2194,65 @@ function UserDashboard({ profile, banks, applications, notice, setNotice, onLoan
       </form>
     </section>
     <section className="bank-panel transaction-panel" id="customer-activity"><div className="bank-panel-heading"><div><span className="eyebrow">ACCOUNT ACTIVITY</span><h2>All transactions</h2></div><Wallet size={22} /></div>{transactions.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Date</th><th>Account</th><th>Transaction</th><th>Amount</th><th>Balance after</th></tr></thead><PaginatedRows rows={transactions} colSpan={5} renderRow={(transaction) => <tr key={`${transaction.accountNumber}-${transaction._id}`}><td>{new Date(transaction.createdAt).toLocaleString()}</td><td>{transaction.accountName}<br /><small>{transaction.accountNumber}</small></td><td>{transaction.description || transaction.type.replaceAll('_', ' ')}</td><td className={['deposit', 'transfer_in', 'loan_disbursement'].includes(transaction.type) ? 'financial-positive' : 'financial-negative'}>{['deposit', 'transfer_in', 'loan_disbursement'].includes(transaction.type) ? '+' : '-'}{currency(transaction.amount)}</td><td>{currency(transaction.balanceAfter)}</td></tr>} /></table></div> : <p className="empty-state">Your account activity will appear here.</p>}</section>
-    <section className="bank-panel loans-panel" id="customer-applications"><div className="bank-panel-heading"><div><span className="eyebrow">APPLICATION TRACKER</span><h2>Your loan requests</h2></div><Clock3 size={22} /></div>{latestApplications.length ? <div className="loan-list">{latestApplications.map((application) => <article className="customer-loan-row" key={application._id}><div className="customer-loan-summary"><strong><LoanMoney amount={application.amount} /> · {application.bankName}</strong><small>{application.purpose} · {application.branchName} · {application.termMonths} months</small>{application.annualInterestRate !== undefined && <small>{application.annualInterestRate}% annual interest · {currency(application.monthlyPayment)} estimated monthly payment</small>}<small>Outstanding principal: {currency(application.outstandingPrincipal)} · {currency(application.interestIncome)} interest paid</small></div><span className={`loan-status ${application.status}`}>{application.status}</span>{application.status === 'approved' && <CustomerLoanRepayment application={application} onPay={onVirtualLoanPayment} />}{application.repayments?.length > 0 && <div className="customer-payment-receipts">{application.repayments.slice(-3).reverse().map((item, index) => <div key={`${application._id}-receipt-${index}`}><strong>{currency(item.amount)} · {new Date(item.paidAt).toLocaleDateString()}</strong><small>{item.receiptNumber ? `Receipt ${item.receiptNumber} · ` : ''}{item.paymentMode === 'virtual_simulation' ? 'Virtual simulation' : 'Recorded repayment'}{item.paymentChannel ? ` · ${item.paymentChannel.replaceAll('_', ' ')}` : ''}</small></div>)}</div>}</article>)}</div> : <p className="empty-state">You have not applied for a loan yet.</p>}</section>
+    <section className="bank-panel loans-panel" id="customer-applications"><div className="bank-panel-heading"><div><span className="eyebrow">APPLICATION TRACKER</span><h2>Your loan requests</h2></div><Clock3 size={22} /></div>{latestApplications.length ? <div className="loan-list">{latestApplications.map((application) => <article className="customer-loan-row" key={application._id}><div className="customer-loan-summary"><strong><LoanMoney amount={application.amount} /> · {application.bankName}</strong><small>{application.purpose} · {application.branchName} · {application.termMonths} months</small>{application.annualInterestRate !== undefined && <small>{application.annualInterestRate}% annual interest · {currency(application.monthlyPayment)} estimated monthly payment</small>}<small>Outstanding principal: {currency(application.outstandingPrincipal)} · {currency(application.interestIncome)} interest paid</small></div><span className={`loan-status ${application.status}`}>{application.status}</span>{application.status === 'approved' && <CustomerLoanRepayment application={application} accounts={eligibleLoanAccounts(application)} onAccountPay={onAccountLoanPayment} onVirtualPay={onVirtualLoanPayment} onAccountsRefresh={async () => { const { accounts } = await getMyBankAccounts(token); setBankAccounts(accounts || []); }} />}{application.repayments?.length > 0 && <div className="customer-payment-receipts">{application.repayments.slice(-3).reverse().map((item, index) => <div key={`${application._id}-receipt-${index}`}><strong>{currency(item.amount)} · {new Date(item.paidAt).toLocaleDateString()}</strong><small>{item.receiptNumber ? `Receipt ${item.receiptNumber} · ` : ''}{item.paymentMode === 'virtual_simulation' ? 'Virtual simulation' : item.paymentMode === 'account_transfer' ? 'Paid from bank account' : 'Recorded repayment'}{item.paymentChannel ? ` · ${item.paymentChannel.replaceAll('_', ' ')}` : ''}</small></div>)}</div>}</article>)}</div> : <p className="empty-state">You have not applied for a loan yet.</p>}</section>
   </>;
 }
 
-function CustomerLoanRepayment({ application, onPay }) {
+function CustomerLoanRepayment({ application, accounts, onAccountPay, onVirtualPay, onAccountsRefresh }) {
   const [amount, setAmount] = useState(String(application.monthlyPayment || ''));
+  const [method, setMethod] = useState(accounts.length ? 'account' : 'virtual');
+  const [accountId, setAccountId] = useState(accounts[0]?._id || '');
   const [channel, setChannel] = useState('mtn_mobile_money');
   const [simulateFailure, setSimulateFailure] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState({ type: '', text: '' });
   const requestKey = useRef(null);
+  const eligibleAccountIds = accounts.map((account) => account._id).join(':');
+
+  useEffect(() => {
+    if (!accounts.some((account) => account._id === accountId)) {
+      const nextAccount = accounts[0]?._id || '';
+      setAccountId(nextAccount);
+      if (nextAccount) setMethod('account');
+    }
+  }, [eligibleAccountIds, accountId]);
 
   async function submit(event) {
     event.preventDefault();
     setSubmitting(true);
     setNotice({ type: '', text: '' });
-    const signature = `${amount}:${channel}:${simulateFailure}`;
+    const signature = `${amount}:${method}:${accountId}:${channel}:${simulateFailure}`;
     if (requestKey.current?.signature !== signature) {
       requestKey.current = { signature, key: window.crypto.randomUUID() };
     }
     try {
-      const payment = await onPay(application._id, {
-        amount: Number(amount),
-        channel,
-        simulateFailure,
-        idempotencyKey: requestKey.current.key
-      });
+      const payment = method === 'account'
+        ? await onAccountPay(application._id, { amount: Number(amount), accountId, idempotencyKey: requestKey.current.key })
+        : await onVirtualPay(application._id, { amount: Number(amount), channel, simulateFailure, idempotencyKey: requestKey.current.key });
       if (!payment) {
         setNotice({ type: 'error', text: 'Payment was not confirmed. No loan repayment was recorded.' });
         return;
       }
+      if (payment.status === 'error') {
+        setNotice({ type: 'error', text: `${payment.message || 'The payment could not be confirmed.'} If the request was interrupted, retry with the same details to check its outcome safely.` });
+        return;
+      }
       requestKey.current = null;
+      let accountRefreshWarning = '';
+      if (payment.status === 'succeeded' && method === 'account') {
+        try {
+          await onAccountsRefresh();
+        } catch (refreshError) {
+          accountRefreshWarning = ` The payment succeeded, but the account balance could not refresh: ${refreshError.message}`;
+        }
+      }
       setNotice({
         type: 'success',
-        text: payment.status === 'succeeded'
-          ? `Simulation succeeded. Receipt: ${payment.receiptNumber}. No real funds moved.`
-          : `Simulation declined. Reference: ${payment.reference}. No repayment was recorded.`
+        text: method === 'account'
+          ? `Payment completed. Receipt: ${payment.receiptNumber}. Your account was debited.${accountRefreshWarning}`
+          : payment.status === 'succeeded'
+            ? `Simulation succeeded. Receipt: ${payment.receiptNumber}. No real funds moved.`
+            : `Simulation declined. Reference: ${payment.reference}. No repayment was recorded.`
       });
     } finally {
       setSubmitting(false);
@@ -1937,11 +2260,12 @@ function CustomerLoanRepayment({ application, onPay }) {
   }
 
   return <form className="customer-repayment-form" onSubmit={submit}>
-    <div><label>Repayment amount (RWF)<input type="number" min="1" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} required /></label><label>Virtual payment method<select value={channel} onChange={(event) => setChannel(event.target.value)}><option value="mtn_mobile_money">MTN Mobile Money (simulation)</option><option value="airtel_mobile_money">Airtel Money (simulation)</option><option value="bank_transfer">Bank transfer (simulation)</option><option value="virtual_account">Virtual account (simulation)</option></select></label></div>
-    <label className="check-row"><input type="checkbox" checked={simulateFailure} onChange={(event) => setSimulateFailure(event.target.checked)} /> Simulate a declined payment (test only)</label>
+    <div><label>Repayment amount (RWF)<input type="number" min="1" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} required /></label><label>Payment method<select value={method} onChange={(event) => setMethod(event.target.value)}><option value="account" disabled={!accounts.length}>Pay from my bank account{accounts.length ? '' : ' (no eligible account)'}</option><option value="virtual">Virtual payment simulation</option></select></label></div>
+    {!accounts.length && <p className="form-disclaimer">No active account is available at this loan’s bank and sub-branch. Open or activate an eligible account before choosing account repayment.</p>}
+    {method === 'account' ? <label>Debit account<select value={accountId} onChange={(event) => setAccountId(event.target.value)} required><option value="">Select an eligible account</option>{accounts.map((account) => <option key={account._id} value={account._id}>{account.accountName} · {account.accountNumber} · {currency(account.balance)} available</option>)}</select></label> : <><label>Virtual payment method<select value={channel} onChange={(event) => setChannel(event.target.value)}><option value="mtn_mobile_money">MTN Mobile Money (simulation)</option><option value="airtel_mobile_money">Airtel Money (simulation)</option><option value="bank_transfer">Bank transfer (simulation)</option><option value="virtual_account">Virtual account (simulation)</option></select></label><label className="check-row"><input type="checkbox" checked={simulateFailure} onChange={(event) => setSimulateFailure(event.target.checked)} /> Simulate a declined payment (test only)</label></>}
     {notice.text && <Notice notice={notice} />}
-    <p className="form-disclaimer">Demo only: a successful test updates the loan ledger and issues a receipt. It does not debit an account or transfer real money.</p>
-    <button className="bank-button" type="submit" disabled={submitting}>{submitting ? 'Simulating…' : 'Make virtual repayment'}</button>
+    <p className="form-disclaimer">{method === 'account' ? 'Your selected account will be debited immediately. The account must have sufficient available funds.' : 'Demo only: a successful test updates the loan ledger and issues a receipt. It does not debit an account or transfer real money.'}</p>
+    <button className="bank-button" type="submit" disabled={submitting || (method === 'account' && (!accounts.length || !accountId))}>{submitting ? 'Processing...' : method === 'account' ? 'Pay loan from account' : 'Make virtual repayment'}</button>
   </form>;
 }
 

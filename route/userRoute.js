@@ -1,8 +1,16 @@
 // User Routes
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const userController = require('../controler/userController');
 const { requireAuth, requireAdmin, requireStaffRole } = require('../middleware/auth');
+const passwordResetLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many password reset requests. Please try again later.' }
+});
 
 /**
  * @swagger
@@ -235,6 +243,52 @@ router.post('/users/resend-otp', userController.resendOtp);
  *         description: Invalid or expired OTP
  */
 router.post('/users/verify-otp', userController.verifyOtp);
+
+/**
+ * @swagger
+ * /api/users/password-reset/request:
+ *   post:
+ *     summary: Request an email password reset code
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email]
+ *             properties:
+ *               email: { type: string, format: email }
+ *     responses:
+ *       202: { description: A reset code will be sent if the account is eligible }
+ *       400: { description: Invalid email }
+ *       429: { description: Reset request limit reached }
+ */
+router.post('/users/password-reset/request', passwordResetLimiter, userController.requestPasswordReset);
+
+/**
+ * @swagger
+ * /api/users/password-reset/confirm:
+ *   post:
+ *     summary: Reset a password using its email code
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, otp, newPassword]
+ *             properties:
+ *               email: { type: string, format: email }
+ *               otp: { type: string, pattern: '^\\d{6}$' }
+ *               newPassword: { type: string, minLength: 8 }
+ *     responses:
+ *       200: { description: Password changed }
+ *       400: { description: Invalid or expired code, or invalid password }
+ *       429: { description: Reset request limit reached }
+ */
+router.post('/users/password-reset/confirm', passwordResetLimiter, userController.confirmPasswordReset);
 
 /**
  * @swagger

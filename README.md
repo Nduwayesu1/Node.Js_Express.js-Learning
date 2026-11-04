@@ -32,6 +32,12 @@ Customers can test loan repayments using the isolated Python FastAPI service in 
 
 **The virtual simulator is not a payment provider.** A simulated success updates only the loan repayment ledger and issues a `VIRT-` reference/receipt; it does not debit an account or move money. Do not connect this simulator to production payment flows or treat its receipts as proof of funds. Use an authorized provider integration before accepting real payments.
 
+Customers may also pay an approved loan directly from their own active bank account when that account belongs to the loan's bank and sub-branch. The account debit, account transaction, loan allocation, receipt, and idempotent payment record are committed together in a MongoDB transaction. The database must support transactions (normally a replica set). A direct account payment moves the account balance inside this system; it is not an external bank transfer.
+
+Employees can record one attendance check-in per day using a consented camera selfie. The system stores attendance photos encrypted with AES-256-GCM and does not perform facial recognition. Only HR Managers assigned to the same bank can retrieve a photo; employee and report APIs omit photo data. Configure `ATTENDANCE_ENCRYPTION_KEY` with a fresh base64-encoded 32-byte key (for example, generate one using `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`). Keep the key in the deployment secret manager, back it up securely, and never commit it. Changing or losing the key makes existing attendance photos unreadable. Attendance photo retention and deletion must follow the bank's approved policy.
+
+Password recovery uses a one-time email code valid for 10 minutes and the configured SMTP service. Guest mode previews the system with fictional data and no operational actions; feedback submission is the only write action available to a guest.
+
 Loan applications, decisions, repayments, and defaults are stored in MongoDB and limited to the applicant, administrators, Bank Admins for their bank, or employees assigned to the loan's sub-branch.
 
 The System Admin can view and filter bank accounts and deposit history across every bank and sub-branch, inspect bank profiles and staff, and manage user roles and bank assignments. Employee accounts are assigned a bank and sub-branch. Each bank role has a scoped dashboard:

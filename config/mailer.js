@@ -58,4 +58,18 @@ async function sendOtpEmail(email, otp) {
     });
 }
 
-module.exports = { sendOtpEmail };
+async function sendPasswordResetEmail(email, otp) {
+    if (!transporter) {
+        throw new Error('SMTP_HOST, SMTP_USER, and SMTP_PASS must be configured');
+    }
+
+    await transporter.sendMail({
+        from: smtpFrom,
+        to: email,
+        subject: 'Your Loan Application password reset code',
+        text: `Your password reset code is ${otp}. It expires in 10 minutes. If you did not request this code, you can ignore this email.`,
+        html: `<p>Use this code to reset your Loan account password:</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px">${otp}</p><p>This code expires in 10 minutes. Never share it with anyone. If you did not request it, ignore this email.</p>`
+    });
+}
+
+module.exports = { sendOtpEmail, sendPasswordResetEmail };

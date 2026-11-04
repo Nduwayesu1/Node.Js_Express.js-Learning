@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const User = require('../modle/User');
 const Bank = require('../modle/Bank');
 const bcrypt = require('bcryptjs');
-const { sendOtpEmail } = require('../config/mailer');
+const { sendOtpEmail, sendPasswordResetEmail } = require('../config/mailer');
 const { createToken } = require('../config/jwt');
 
 function readRegistrationInput(body = {}) {
@@ -384,6 +384,58 @@ async function verifyOtp(req, res) {
     }
 }
 
+async function requestPasswordReset(req, res) {
+    const email = req.body.email?.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ message: 'Enter a valid email address' });
+    }
+    try {
+        const user = await User.findOne({ email, isVerified: true, isActive: { $ne: false } });
+        if (!user) {
+            return res.status(202).json({ message: 'If an active account exists for this email, a reset code will be sent.' });
+        }
+        const otp = crypto.randomInt(100000, 1000000).toString();
+        user.passwordResetOtpHash = crypto.createHash('sha256').update(otp).digest('hex');
+        user.passwordResetExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+        await user.save();
+        await sendPasswordResetEmail(email, otp);
+        return res.status(202).json({ message: 'If an active account exists for this email, a reset code will be sent.' });
+    } catch (error) {
+        console.error('Password reset email failed:', { message: error.message, code: error.code, responseCode: error.responseCode });
+        return res.status(503).json({ message: 'The password reset email could not be sent. Please try again later.' });
+    }
+}
+
+async function confirmPasswordReset(req, res) {
+    const email = req.body.email?.trim().toLowerCase();
+    const otp = String(req.body.otp || '');
+    const newPassword = req.body.newPassword;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+        || !/^\d{6}$/.test(otp)
+        || typeof newPassword !== 'string' || newPassword.length < 8) {
+        return res.status(400).json({ message: 'Provide a valid email, 6-digit reset code, and password with at least 8 characters' });
+    }
+    try {
+        const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+        const password = await bcrypt.hash(newPassword, 10);
+        const updatedUser = await User.findOneAndUpdate({
+            email,
+            passwordResetOtpHash: otpHash,
+            passwordResetExpiresAt: { $gt: new Date() },
+            isVerified: true,
+            isActive: { $ne: false }
+        }, {
+            $set: { password },
+            $unset: { passwordResetOtpHash: 1, passwordResetExpiresAt: 1 }
+        }, { new: true, runValidators: true }).select('_id');
+        if (!updatedUser) return res.status(400).json({ message: 'Invalid or expired password reset code' });
+        return res.status(200).json({ message: 'Password reset successfully. You can now sign in.' });
+    } catch (error) {
+        console.error('Password reset failed:', error.message);
+        return res.status(500).json({ message: 'Unable to reset password' });
+    }
+}
+
 async function loginUser(req, res) {
     const { password } = req.body;
     const email = req.body.email?.trim().toLowerCase();
@@ -641,6 +693,8 @@ module.exports = {
     deactivateBankMember,
     resendOtp,
     verifyOtp,
+    requestPasswordReset,
+    confirmPasswordReset,
     loginUser,
     listUsers,
     activateUser,

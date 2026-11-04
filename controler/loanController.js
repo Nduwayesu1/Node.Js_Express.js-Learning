@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 const Bank = require('../modle/Bank');
 const BankAccount = require('../modle/BankAccount');
 const LoanApplication = require('../modle/LoanApplication');
@@ -220,25 +221,30 @@ async function recordRepayment(req, res) {
     }
 }
 
-function paymentAttemptMatches(attempt, { loanId, amount, channel }) {
+function paymentAttemptMatches(attempt, { loanId, amount, channel, accountId }) {
     return String(attempt.loan) === String(loanId)
         && attempt.amount === amount
-        && attempt.channel === channel;
+        && attempt.channel === channel
+        && String(attempt.accountId || '') === String(accountId || '');
 }
 
 function respondWithPaymentAttempt(res, attempt, loan) {
     const succeeded = attempt.status === 'succeeded';
+    const accountPayment = attempt.channel === 'bank_account';
     return res.status(succeeded ? 200 : 402).json({
-        message: succeeded ? 'Virtual repayment processed successfully' : 'Virtual payment was declined by the simulator',
+        message: accountPayment
+            ? 'Account repayment processed successfully'
+            : succeeded ? 'Virtual repayment processed successfully' : 'Virtual payment was declined by the simulator',
         payment: {
             status: attempt.status,
-            mode: 'simulation',
+            mode: accountPayment ? 'account_transfer' : 'simulation',
             amount: attempt.amount,
             currency: attempt.currency,
             channel: attempt.channel,
             reference: attempt.reference,
             receiptNumber: attempt.receiptNumber,
-            processedAt: attempt.processedAt
+            processedAt: attempt.processedAt,
+            ...(accountPayment ? { accountId: attempt.accountId } : {})
         },
         ...(loan ? { loan } : {})
     });
@@ -416,6 +422,166 @@ async function payLoanWithVirtualSimulator(req, res) {
     }
 }
 
+async function payLoanFromAccount(req, res) {
+    const { amount, accountId, idempotencyKey } = req.body;
+    if (req.user.role !== 'user') {
+        return res.status(403).json({ message: 'Only customers can repay their own loans from an account' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(req.params.loanId) || !mongoose.Types.ObjectId.isValid(accountId)) {
+        return res.status(400).json({ message: 'Select a valid loan and bank account' });
+    }
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+        return res.status(400).json({ message: 'Enter a positive whole-number RWF repayment' });
+    }
+    if (!/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(idempotencyKey || '')) {
+        return res.status(400).json({ message: 'A valid payment request key is required' });
+    }
+
+    const attemptQuery = { applicant: req.user.id, idempotencyKey };
+    const attemptInput = { loanId: req.params.loanId, amount, channel: 'bank_account', accountId };
+    try {
+        const previousAttempt = await LoanPaymentAttempt.findOne(attemptQuery);
+        if (previousAttempt) {
+            if (!paymentAttemptMatches(previousAttempt, attemptInput)) {
+                return res.status(409).json({ message: 'This payment request key was already used for a different payment' });
+            }
+            const loan = await LoanApplication.findOne({ _id: previousAttempt.loan, applicant: req.user.id });
+            return respondWithPaymentAttempt(res, previousAttempt, loan);
+        }
+
+        const session = await mongoose.startSession();
+        let completedAttempt;
+        let updatedLoan;
+        try {
+            await session.withTransaction(async () => {
+                const existingAttempt = await LoanPaymentAttempt.findOne(attemptQuery).session(session);
+                if (existingAttempt) {
+                    if (!paymentAttemptMatches(existingAttempt, attemptInput)) {
+                        throw Object.assign(new Error('This payment request key was already used for a different payment'), { status: 409 });
+                    }
+                    completedAttempt = existingAttempt;
+                    updatedLoan = await LoanApplication.findOne({ _id: existingAttempt.loan, applicant: req.user.id }).session(session);
+                    return;
+                }
+
+                const loan = await LoanApplication.findOne({ _id: req.params.loanId, applicant: req.user.id }).session(session);
+                if (!loan) throw Object.assign(new Error('Loan application not found'), { status: 404 });
+                if (loan.status !== 'approved') {
+                    throw Object.assign(new Error('Only approved loans can receive repayments'), { status: 409 });
+                }
+                const account = await BankAccount.findOne({
+                    _id: accountId,
+                    userId: req.user.id,
+                    bankId: loan.bank,
+                    branchId: loan.branchId,
+                    status: 'active'
+                }).session(session);
+                if (!account) {
+                    throw Object.assign(new Error('Choose an active account owned by you at this loan bank and sub-branch'), { status: 400 });
+                }
+                if (account.balance < amount) {
+                    throw Object.assign(new Error('The selected account does not have enough available balance'), { status: 409 });
+                }
+
+                const paidAt = new Date();
+                const interestDue = loan.unpaidInterest + calculateAccruedInterest(
+                    loan.outstandingPrincipal,
+                    loan.annualInterestRate,
+                    loan.lastPaymentAt || loan.approvedAt,
+                    paidAt
+                );
+                const allocation = allocateRepayment(amount, loan.outstandingPrincipal, interestDue);
+                const reference = `ACC-${crypto.randomUUID()}`;
+                const receiptNumber = `RCP-${crypto.randomUUID()}`;
+                const balanceAfter = account.balance - amount;
+
+                account.balance = balanceAfter;
+                account.transactions.push({
+                    type: 'loan_payment',
+                    amount,
+                    balanceAfter,
+                    description: `Loan repayment for application ${loan._id}`,
+                    paymentProvider: 'internal_bank_account',
+                    paymentReference: reference,
+                    createdAt: paidAt
+                });
+                await account.save({ session });
+
+                [completedAttempt] = await LoanPaymentAttempt.create([{
+                    applicant: req.user.id,
+                    loan: loan._id,
+                    idempotencyKey,
+                    accountId: account._id,
+                    reference,
+                    receiptNumber,
+                    amount,
+                    currency: 'RWF',
+                    channel: 'bank_account',
+                    status: 'succeeded',
+                    processedAt: paidAt
+                }], { session });
+
+                loan.repayments.push({
+                    amount,
+                    interestPortion: allocation.interestPortion,
+                    principalPortion: allocation.principalPortion,
+                    recordedBy: req.user.id,
+                    paymentReference: reference,
+                    receiptNumber,
+                    paymentChannel: 'bank_account',
+                    paymentMode: 'account_transfer',
+                    paidAt
+                });
+                loan.interestIncome += allocation.interestPortion;
+                loan.principalRecovered += allocation.principalPortion;
+                loan.outstandingPrincipal = allocation.remainingPrincipal;
+                loan.unpaidInterest = allocation.remainingInterest;
+                loan.lastPaymentAt = paidAt;
+                if (loan.outstandingPrincipal === 0) loan.status = 'repaid';
+                await loan.save({ session });
+                updatedLoan = loan;
+            });
+        } catch (error) {
+            if (error.code === 11000) {
+                completedAttempt = await LoanPaymentAttempt.findOne(attemptQuery);
+                if (completedAttempt && paymentAttemptMatches(completedAttempt, attemptInput)) {
+                    updatedLoan = await LoanApplication.findOne({ _id: completedAttempt.loan, applicant: req.user.id });
+                } else {
+                    return res.status(409).json({ message: 'This payment request key was already used for a different payment' });
+                }
+            } else if (error.status) {
+                return res.status(error.status).json({ message: error.message });
+            } else {
+                throw error;
+            }
+        } finally {
+            await session.endSession();
+        }
+
+        return res.status(200).json({
+            message: 'Loan repayment debited from your account successfully',
+            payment: {
+                status: completedAttempt.status,
+                mode: 'account_transfer',
+                amount: completedAttempt.amount,
+                currency: completedAttempt.currency,
+                channel: completedAttempt.channel,
+                reference: completedAttempt.reference,
+                receiptNumber: completedAttempt.receiptNumber,
+                processedAt: completedAttempt.processedAt,
+                accountId: completedAttempt.accountId
+            },
+            loan: updatedLoan
+        });
+    } catch (error) {
+        if (error.message === 'Repayment exceeds the current balance due') {
+            return res.status(400).json({ message: error.message });
+        }
+        console.error('Account loan repayment failed:', error.message);
+        return res.status(500).json({ message: 'Unable to process account loan repayment' });
+    }
+}
+
 async function markLoanDefaulted(req, res) {
     try {
         const loan = await LoanApplication.findById(req.params.loanId);
@@ -435,4 +601,4 @@ async function markLoanDefaulted(req, res) {
     }
 }
 
-module.exports = { listLoans, createLoan, decideLoan, recordRepayment, payLoanWithVirtualSimulator, markLoanDefaulted };
+module.exports = { listLoans, createLoan, decideLoan, recordRepayment, payLoanWithVirtualSimulator, payLoanFromAccount, markLoanDefaulted, paymentAttemptMatches };

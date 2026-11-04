@@ -154,6 +154,40 @@ router.post('/loans/:loanId/virtual-payments', requireAuth, loanController.payLo
 
 /**
  * @swagger
+ * /api/loans/{loanId}/account-payments:
+ *   post:
+ *     summary: Repay an approved loan from the customer's bank account
+ *     description: Debits an active account owned by the applicant at the same bank and sub-branch as the loan. The debit and loan ledger update are committed atomically.
+ *     tags: [Loans]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: loanId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [amount, accountId, idempotencyKey]
+ *             properties:
+ *               amount: { type: integer, minimum: 1, example: 5000 }
+ *               accountId: { type: string, example: 65f1a3b2c4d5e6f789012345 }
+ *               idempotencyKey: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Account debited and loan repayment recorded }
+ *       400: { description: Invalid payment or account does not match the loan }
+ *       403: { description: Authenticated user is not the loan applicant }
+ *       404: { description: Loan application not found }
+ *       409: { description: Insufficient funds, request key conflict, or loan is not approved }
+ */
+router.post('/loans/:loanId/account-payments', requireAuth, loanController.payLoanFromAccount);
+
+/**
+ * @swagger
  * /api/loans/{loanId}/default:
  *   patch:
  *     summary: Mark an approved loan as defaulted

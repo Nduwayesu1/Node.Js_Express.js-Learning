@@ -49,6 +49,8 @@ export const createBankStaff = (token, body) => apiRequest('/api/users/staff', {
 export const activateBankStaff = (token, staffId) => apiRequest(`/api/users/staff/${staffId}/activate`, { method: 'PATCH', token });
 export const deactivateBankStaff = (token, staffId) => apiRequest(`/api/users/staff/${staffId}/deactivate`, { method: 'PATCH', token });
 export const resendOtp = (email) => apiRequest('/api/users/resend-otp', { method: 'POST', body: { email } });
+export const requestPasswordReset = (email) => apiRequest('/api/users/password-reset/request', { method: 'POST', body: { email } });
+export const confirmPasswordReset = (body) => apiRequest('/api/users/password-reset/confirm', { method: 'POST', body });
 export const verifyOtp = (otp) => apiRequest('/api/users/verify-otp', { method: 'POST', body: { otp } });
 export const login = (body) => apiRequest('/api/users/login', { method: 'POST', body });
 export const getProfile = (token) => apiRequest('/api/users/me', { token });
@@ -88,9 +90,28 @@ export const createLoan = (token, body) => apiRequest('/api/loans', { method: 'P
 export const decideLoan = (token, loanId, body) => apiRequest(`/api/loans/${loanId}/decision`, { method: 'PATCH', token, body });
 export const recordLoanRepayment = (token, loanId, amount) => apiRequest(`/api/loans/${loanId}/repayments`, { method: 'POST', token, body: { amount } });
 export const payLoanWithVirtualSimulator = (token, loanId, body) => apiRequest(`/api/loans/${loanId}/virtual-payments`, { method: 'POST', token, body });
+export const payLoanFromAccount = (token, loanId, body) => apiRequest(`/api/loans/${loanId}/account-payments`, { method: 'POST', token, body });
 export const markLoanDefaulted = (token, loanId) => apiRequest(`/api/loans/${loanId}/default`, { method: 'PATCH', token });
 export const getGuestFeedback = (token) => apiRequest('/api/admin/guest-feedback', { token });
 export const markGuestFeedbackReviewed = (token, feedbackId) => apiRequest(`/api/admin/guest-feedback/${feedbackId}/reviewed`, { method: 'PATCH', token });
+export const getMyAttendance = (token) => apiRequest('/api/attendance/mine', { token });
+export const checkInForAttendance = (token, body) => apiRequest('/api/attendance/check-in', { method: 'POST', token, body });
+export const getBankAttendance = (token) => apiRequest('/api/attendance/hr', { token });
+export const getAttendancePhoto = async (token, attendanceId) => {
+  let response;
+  try {
+    response = await fetch(`${API_URL}/api/attendance/${attendanceId}/photo`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+  } catch {
+    throw new Error('Unable to reach the API while loading the attendance photo.');
+  }
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.message || `Attendance photo request failed with HTTP ${response.status}.`);
+  }
+  return response.blob();
+};
 export const submitGuestFeedback = (body) => apiRequest('/api/guest-feedback', { method: 'POST', body });
 export const getRwandaProvinces = () => getRwandaLocations('/provinces');
 export const getRwandaDistricts = (province) => getRwandaLocations(`/districts?province=${encodeURIComponent(province)}`);
