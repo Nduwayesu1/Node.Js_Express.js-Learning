@@ -2,33 +2,127 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controler/userController');
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth, requireAdmin, requireStaffRole } = require('../middleware/auth');
 
 /**
  * @swagger
- * /api/users:
+ * /api/users/bank-admins:
  *   post:
- *     summary: Create a user
+ *     summary: Create a bank administrator assigned to a bank sub-branch
  *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/CreateUserRequest'
+ *             type: object
+ *             required: [name, email, password, bankId, branchId]
+ *             properties:
+ *               name: { type: string }
+ *               email: { type: string, format: email }
+ *               password: { type: string, minLength: 8 }
+ *               bankId: { type: string }
+ *               branchId: { type: string }
  *     responses:
- *       202:
- *         description: User created and OTP sent for verification
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/UserCreatedResponse'
- *       400:
- *         description: Required fields are missing or the email already exists
- *       500:
- *         description: Server error while creating the user
+ *       202: { description: Bank administrator created and verification code sent }
+ *       400: { description: Invalid registration details or bank sub-branch }
+ *       403: { description: Administrator access is required }
  */
-router.post('/users', userController.createUser);
+router.post('/users/bank-admins', requireAuth, requireAdmin, userController.createBankAdmin);
+
+/**
+ * @swagger
+ * /api/users/members:
+ *   get:
+ *     summary: List members registered with the authenticated Bank Admin's assigned sub-branch
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200: { description: Bank members returned }
+ *       403: { description: Bank administrator access is required }
+ *   post:
+ *     summary: Register a member with the authenticated Bank Admin's assigned sub-branch
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, email, password]
+ *             properties:
+ *               name: { type: string }
+ *               email: { type: string, format: email }
+ *               password: { type: string, minLength: 8 }
+ *     responses:
+ *       202: { description: Member created and verification code sent; manager approval is still required after OTP verification }
+ *       400: { description: Invalid registration details }
+ *       403: { description: Bank Admin must be assigned to a bank sub-branch }
+ */
+router.get('/users/members', requireAuth, requireStaffRole('branch_manager', 'general_manager', 'hr_manager'), userController.listBankMembers);
+router.post('/users/members', requireAuth, requireStaffRole('branch_manager'), userController.createBankMember);
+/**
+ * @swagger
+ * /api/users/staff:
+ *   get:
+ *     summary: List bank employees assigned to the authenticated employee's sub-branch
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200: { description: Bank staff returned }
+ *       403: { description: Bank employee must have a sub-branch assignment }
+ *   post:
+ *     summary: Create a bank employee in the authenticated Branch Manager's sub-branch
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, email, password, staffRole]
+ *             properties:
+ *               name: { type: string }
+ *               email: { type: string, format: email }
+ *               password: { type: string, minLength: 8 }
+ *               staffRole: { type: string, enum: [general_manager, hr_manager, finance_manager, accounts_manager] }
+ *     responses:
+ *       202: { description: Bank employee created and verification code sent }
+ *       400: { description: Invalid registration details or staff role }
+ *       403: { description: Branch Manager access is required }
+ */
+router.get('/users/staff', requireAuth, requireStaffRole('branch_manager', 'general_manager', 'hr_manager'), userController.listBankStaff);
+router.post('/users/staff', requireAuth, requireStaffRole('branch_manager'), userController.createBankStaff);
+
+/**
+ * @swagger
+ * /api/users/members/{memberId}/activate:
+ *   patch:
+ *     summary: Approve and activate a member of the authenticated Branch Manager's assigned sub-branch
+ *     description: Marks the member approved and verified so they can sign in without entering their emailed OTP.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: memberId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Bank member approved and activated }
+ *       400: { description: Invalid bank member identifier }
+ *       403: { description: Bank administrator access is required }
+ *       404: { description: Bank member not found in the administrator's bank }
+ */
+router.patch('/users/members/:memberId/activate', requireAuth, requireStaffRole('branch_manager'), userController.activateBankMember);
 
 /**
  * @swagger
@@ -81,7 +175,7 @@ router.post('/users/verify-otp', userController.verifyOtp);
  * @swagger
  * /api/users/login:
  *   post:
- *     summary: Log in a verified user and issue a JWT
+ *     summary: Log in an OTP-verified and, when applicable, Branch Manager-approved user and issue a JWT
  *     tags: [Users]
  *     requestBody:
  *       required: true

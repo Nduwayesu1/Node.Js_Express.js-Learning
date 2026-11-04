@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const User = require('../modle/User');
 
 function requireAuth(req, res, next) {
     const authorization = req.headers.authorization;
@@ -30,4 +31,32 @@ function requireAdmin(req, res, next) {
     return next();
 }
 
-module.exports = { requireAuth, requireAdmin };   
+function requireEmployee(req, res, next) {
+    if (req.user.role !== 'employee') {
+        return res.status(403).json({ message: 'Bank administrator access is required' });
+    }
+
+    return next();
+}
+
+function requireStaffRole(...allowedRoles) {
+    return async (req, res, next) => {
+        if (req.user.role !== 'employee') {
+            return res.status(403).json({ message: 'Bank staff access is required' });
+        }
+
+        try {
+            const employee = await User.findById(req.user.id).select('staffRole').lean();
+            const staffRole = employee?.staffRole || 'branch_manager';
+            if (!allowedRoles.includes(staffRole)) {
+                return res.status(403).json({ message: 'Your bank staff role does not have permission for this action' });
+            }
+            return next();
+        } catch (error) {
+            console.error('Bank staff role lookup failed:', error.message);
+            return res.status(500).json({ message: 'Unable to verify bank staff permissions' });
+        }
+    };
+}
+
+module.exports = { requireAuth, requireAdmin, requireEmployee, requireStaffRole };

@@ -3,32 +3,36 @@ const Bank = require('../modle/Bank');
 const PayrollBatch = require('../modle/PayrollBatch');
 const User = require('../modle/User');
 
-function financeManagerMatches(bank, user) {
-    return user.role === 'employee'
-        && bank.leadership.financeManager.email.toLowerCase() === user.email.toLowerCase();
-}
-
 async function findFinanceBank(req, bankId) {
+    const employee = await User.findById(req.user.id).select('role staffRole bankId branchId');
+    if (employee?.role !== 'employee' || employee.staffRole !== 'finance_manager') {
+        return { error: { status: 403, message: 'Finance Manager access is required' } };
+    }
+    if (!employee.bankId || !employee.branchId || !employee.bankId.equals(bankId)) {
+        return { error: { status: 403, message: 'Your Finance Manager account is not assigned to this bank sub-branch' } };
+    }
     const bank = await Bank.findById(bankId);
     if (!bank) return { error: { status: 404, message: 'Bank not found' } };
-    if (!financeManagerMatches(bank, req.user)) return { error: { status: 403, message: 'Only this bank\'s Finance Manager can access payroll' } };
-    const financeUser = await User.findById(req.user.id).select('bankId');
-    if (!financeUser?.bankId || !financeUser.bankId.equals(bank._id)) {
-        return { error: { status: 403, message: 'Your employee account is not assigned to this bank' } };
+    const branch = bank.branches.id(employee.branchId);
+    if (!branch) {
+        return { error: { status: 404, message: 'Your assigned sub-branch was not found in this bank' } };
     }
-    return { bank };
+    return { bank, employee, branch };
 }
 
 async function listFinanceBanks(req, res) {
-    if (req.user.role !== 'employee') return res.status(403).json({ message: 'Finance Manager access is required' });
     try {
-        const financeUser = await User.findById(req.user.id).select('bankId');
-        if (!financeUser?.bankId) return res.status(200).json({ banks: [] });
-        const banks = await Bank.find({
-            _id: financeUser.bankId,
-            'leadership.financeManager.email': req.user.email.toLowerCase()
-        }).sort({ bankName: 1 });
-        return res.status(200).json({ banks });
+        const financeUser = await User.findById(req.user.id).select('role staffRole bankId branchId');
+        if (financeUser?.role !== 'employee' || financeUser.staffRole !== 'finance_manager') {
+            return res.status(403).json({ message: 'Finance Manager access is required' });
+        }
+        if (!financeUser.bankId || !financeUser.branchId) return res.status(200).json({ banks: [] });
+        const bank = await Bank.findById(financeUser.bankId);
+        if (!bank) return res.status(200).json({ banks: [] });
+        const branch = bank.branches.id(financeUser.branchId);
+        if (!branch) return res.status(404).json({ message: 'Your assigned sub-branch was not found in this bank' });
+        bank.branches = [branch];
+        return res.status(200).json({ banks: [bank] });
     } catch (error) {
         console.error('Finance bank list failed:', error.message);
         return res.status(500).json({ message: 'Unable to load assigned banks' });
@@ -40,7 +44,9 @@ async function listEligibleEmployees(req, res) {
         const result = await findFinanceBank(req, req.params.bankId);
         if (result.error) return res.status(result.error.status).json({ message: result.error.message });
         const branch = result.bank.branches.id(req.params.branchId);
-        if (!branch) return res.status(404).json({ message: 'Sub-branch not found in this bank' });
+        if (!branch || !branch._id.equals(result.employee.branchId)) {
+            return res.status(403).json({ message: 'You can only view payroll employees in your assigned sub-branch' });
+        }
         const employees = await User.find({
             role: 'employee',
             isVerified: true,
@@ -61,7 +67,7 @@ async function listBatches(req, res) {
     try {
         const result = await findFinanceBank(req, req.params.bankId);
         if (result.error) return res.status(result.error.status).json({ message: result.error.message });
-        const batches = await PayrollBatch.find({ bank: result.bank._id }).sort({ createdAt: -1 });
+        const batches = await PayrollBatch.find({ bank: result.bank._id, branchId: result.branch._id }).sort({ createdAt: -1 });
         return res.status(200).json({ batches });
     } catch (error) {
         console.error('Payroll batch list failed:', error.message);
@@ -88,7 +94,9 @@ async function createBatch(req, res) {
         const result = await findFinanceBank(req, bankId);
         if (result.error) return res.status(result.error.status).json({ message: result.error.message });
         const branch = result.bank.branches.id(branchId);
-        if (!branch) return res.status(404).json({ message: 'Sub-branch not found in this bank' });
+        if (!branch || !branch._id.equals(result.employee.branchId)) {
+            return res.status(403).json({ message: 'You can only queue payroll for your assigned sub-branch' });
+        }
 
         const employees = await User.find({
             _id: { $in: employeeIds },

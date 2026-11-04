@@ -11,7 +11,10 @@ async function listLoans(req, res) {
         if (req.user.role === 'user') {
             filter = { applicant: req.user.id };
         } else if (req.user.role === 'employee') {
-            const employee = await User.findById(req.user.id).select('bankId branchId');
+            const employee = await User.findById(req.user.id).select('bankId branchId staffRole');
+            if (!['branch_manager', 'general_manager'].includes(employee?.staffRole || 'branch_manager')) {
+                return res.status(403).json({ message: 'Loan reports are not available for your bank staff role' });
+            }
             if (!employee?.bankId || !employee?.branchId) return res.status(200).json({ loans: [] });
             filter = { bank: employee.bankId, branchId: employee.branchId };
         } else if (req.user.role !== 'admin') {
@@ -51,12 +54,16 @@ async function createLoan(req, res) {
     try {
         const [bank, applicant] = await Promise.all([
             Bank.findById(bankId),
-            User.findById(req.user.id).select('name email isVerified')
+            User.findById(req.user.id).select('name email isVerified isApproved customerBankId')
         ]);
         if (!bank) return res.status(404).json({ message: 'Bank not found' });
         const branch = bank.branches.id(branchId);
         if (!branch) return res.status(404).json({ message: 'Sub-branch not found in this bank' });
         if (!applicant?.isVerified) return res.status(403).json({ message: 'A verified customer account is required' });
+        if (!applicant.isApproved) return res.status(403).json({ message: 'Your bank membership must be approved before applying for a loan' });
+        if (applicant.customerBankId && !applicant.customerBankId.equals(bank._id)) {
+            return res.status(403).json({ message: 'You can only apply for a loan at the bank you registered with' });
+        }
         const existingApplication = await LoanApplication.findOne({ applicant: applicant._id }).select('_id');
         if (existingApplication) {
             return res.status(409).json({ message: 'You have already submitted a loan application.' });
@@ -95,8 +102,10 @@ async function createLoan(req, res) {
 async function canManageLoan(req, loan) {
     if (req.user.role === 'admin') return true;
     if (req.user.role !== 'employee') return false;
-    const employee = await User.findById(req.user.id).select('bankId branchId');
-    return Boolean(employee?.bankId?.equals(loan.bank) && employee.branchId?.equals(loan.branchId));
+    const employee = await User.findById(req.user.id).select('bankId branchId staffRole');
+    return Boolean((employee?.staffRole || 'branch_manager') === 'branch_manager'
+        && employee.bankId?.equals(loan.bank)
+        && employee.branchId?.equals(loan.branchId));
 }
 
 async function decideLoan(req, res) {

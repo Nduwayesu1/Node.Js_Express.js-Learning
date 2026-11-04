@@ -1,6 +1,7 @@
 const express = require('express');
 const payrollController = require('../controler/payrollController');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireStaffRole } = require('../middleware/auth');
+const requireFinanceManager = requireStaffRole('finance_manager');
 
 const router = express.Router();
 
@@ -16,7 +17,7 @@ const router = express.Router();
  *       200: { description: Assigned banks returned, or an empty list if none are assigned }
  *       403: { description: Finance Manager access is required }
  */
-router.get('/payroll/banks', requireAuth, payrollController.listFinanceBanks);
+router.get('/payroll/banks', requireAuth, requireFinanceManager, payrollController.listFinanceBanks);
 
 /**
  * @swagger
@@ -40,7 +41,7 @@ router.get('/payroll/banks', requireAuth, payrollController.listFinanceBanks);
  *       403: { description: Caller is not the Finance Manager assigned to this bank }
  *       404: { description: Bank or branch not found }
  */
-router.get('/payroll/banks/:bankId/branches/:branchId/employees', requireAuth, payrollController.listEligibleEmployees);
+router.get('/payroll/banks/:bankId/branches/:branchId/employees', requireAuth, requireFinanceManager, payrollController.listEligibleEmployees);
 
 /**
  * @swagger
@@ -60,7 +61,7 @@ router.get('/payroll/banks/:bankId/branches/:branchId/employees', requireAuth, p
  *       403: { description: Caller is not the Finance Manager assigned to this bank }
  *       404: { description: Bank not found }
  */
-router.get('/payroll/banks/:bankId/batches', requireAuth, payrollController.listBatches);
+router.get('/payroll/banks/:bankId/batches', requireAuth, requireFinanceManager, payrollController.listBatches);
 
 /**
  * @swagger
@@ -93,6 +94,6 @@ router.get('/payroll/banks/:bankId/batches', requireAuth, payrollController.list
  *       403: { description: Caller is not the Finance Manager assigned to this bank }
  *       404: { description: Bank or branch not found }
  */
-router.post('/payroll/batches', requireAuth, payrollController.createBatch);
+router.post('/payroll/batches', requireAuth, requireFinanceManager, payrollController.createBatch);
 
 module.exports = router;

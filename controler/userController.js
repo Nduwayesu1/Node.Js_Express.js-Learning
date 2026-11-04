@@ -6,40 +6,68 @@ const bcrypt = require('bcryptjs');
 const { sendOtpEmail } = require('../config/mailer');
 const { createToken } = require('../config/jwt');
 
-async function createUser(req, res) {
-    const { name, password } = req.body;
-    const email = req.body.email?.trim().toLowerCase();
+function readRegistrationInput(body = {}) {
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const { password } = body;
 
-    if (!name || !email || !password) {
-        return res.status(400).json({ message: 'Name, email, and password are required' });
-    }
-
+    if (!name || !email || !password) return { error: 'Name, email, and password are required' };
     if (typeof password !== 'string' || password.length < 8) {
-        return res.status(400).json({ message: 'Password must be at least 8 characters long' });
+        return { error: 'Password must be at least 8 characters long' };
     }
 
+    return { name, email, password };
+}
+
+async function createPendingUser({ name, email, password, bankId, branchId, role, staffRole, accountLabel }) {
     const otp = crypto.randomInt(100000, 1000000).toString();
-    const existingUser = await User.findOne({ email });
-    if (existingUser?.isVerified) {
-        return res.status(400).json({ message: 'User with this email already exists' });
-    }
-
-    const user = existingUser || new User({ email, role: 'user' });
-    user.name = name;
-    user.password = bcrypt.hashSync(password, 10);
-    user.otpHash = crypto.createHash('sha256').update(otp).digest('hex');
-    user.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    let user;
 
     try {
+        const bank = await Bank.findById(bankId).select(branchId ? 'branches._id' : '_id');
+        if (!bank) return { status: 404, message: 'Selected bank was not found' };
+        if (branchId && !bank.branches.id(branchId)) {
+            return { status: 400, message: 'The selected sub-branch does not belong to this bank' };
+        }
+
+        const existingUser = await User.findOne({ email });
+        if (existingUser?.isVerified) {
+            return { status: 400, message: 'User with this email already exists' };
+        }
+        if (existingUser && (existingUser.role !== role
+            || String(existingUser.customerBankId || existingUser.bankId || '') !== String(bank._id)
+            || (branchId && String(existingUser.branchId || '') !== String(branchId)))) {
+            return { status: 409, message: 'An unverified account with this email is already registered. Contact an administrator.' };
+        }
+
+        user = existingUser || new User({ email, role });
+        user.name = name;
+        user.password = bcrypt.hashSync(password, 10);
+        user.role = role;
+        user.isVerified = false;
+        user.isApproved = role !== 'user';
+        if (role === 'employee') {
+            user.bankId = bank._id;
+            user.branchId = branchId;
+            user.staffRole = staffRole || 'branch_manager';
+            user.customerBankId = undefined;
+        } else {
+            user.customerBankId = bank._id;
+            user.bankId = undefined;
+            user.branchId = branchId || undefined;
+            user.staffRole = undefined;
+        }
+        user.otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+        user.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
         await user.save();
     } catch (error) {
         console.error('User creation failed:', error.message);
-        return res.status(500).json({ message: 'Unable to create user' });
+        return { status: 500, message: 'Unable to create user' };
     }
 
     try {
         await sendOtpEmail(email, otp);
-        return res.status(202).json({ message: 'User created. Check your email for the verification code.' });
+        return { status: 202, message: `${accountLabel} created. Check your email for the verification code.` };
     } catch (error) {
         console.error('OTP email failed:', {
             message: error.message,
@@ -47,15 +75,157 @@ async function createUser(req, res) {
             responseCode: error.responseCode,
             response: error.response
         });
-        return res.status(503).json({ message: 'User created, but the verification email could not be sent' });
+        return { status: 503, message: `${accountLabel} created, but the verification email could not be sent` };
+    }
+}
+
+async function createBankAdmin(req, res) {
+    const input = readRegistrationInput(req.body);
+    if (input.error) return res.status(400).json({ message: input.error });
+    const { bankId, branchId } = req.body;
+    if (!mongoose.Types.ObjectId.isValid(bankId) || !mongoose.Types.ObjectId.isValid(branchId)) {
+        return res.status(400).json({ message: 'Select a valid bank and sub-branch' });
+    }
+
+    const result = await createPendingUser({
+        ...input,
+        bankId,
+        branchId,
+        role: 'employee',
+        staffRole: 'branch_manager',
+        accountLabel: 'Bank Admin'
+    });
+    return res.status(result.status).json({ message: result.message });
+}
+
+async function createBankStaff(req, res) {
+    const bankAdmin = await getAssignedBankAdmin(req, res);
+    if (!bankAdmin) return;
+    const input = readRegistrationInput(req.body);
+    if (input.error) return res.status(400).json({ message: input.error });
+
+    const staffRole = req.body.staffRole;
+    if (!['general_manager', 'hr_manager', 'finance_manager', 'accounts_manager'].includes(staffRole)) {
+        return res.status(400).json({ message: 'Select a valid bank staff role' });
+    }
+
+    const result = await createPendingUser({
+        ...input,
+        bankId: bankAdmin.bankId,
+        branchId: bankAdmin.branchId,
+        role: 'employee',
+        staffRole,
+        accountLabel: 'Bank staff account'
+    });
+    return res.status(result.status).json({ message: result.message });
+}
+
+async function listBankStaff(req, res) {
+    const bankAdmin = await getAssignedBankAdmin(req, res);
+    if (!bankAdmin) return;
+
+    try {
+        const staff = await User.find({
+            role: 'employee',
+            bankId: bankAdmin.bankId,
+            branchId: bankAdmin.branchId
+        }).select('name email staffRole isVerified createdAt').sort({ staffRole: 1, name: 1 });
+        return res.status(200).json({ staff });
+    } catch (error) {
+        console.error('Bank staff list failed:', error.message);
+        return res.status(500).json({ message: 'Unable to load bank staff' });
+    }
+}
+
+async function getAssignedBankAdmin(req, res) {
+    try {
+        const bankAdmin = await User.findById(req.user.id).select('role bankId branchId staffRole');
+        if (!bankAdmin || bankAdmin.role !== 'employee') {
+            return res.status(403).json({ message: 'Bank staff access is required' });
+        }
+        if (!bankAdmin.bankId || !bankAdmin.branchId) {
+            return res.status(403).json({ message: 'Your account is not assigned to a bank sub-branch' });
+        }
+        return bankAdmin;
+    } catch (error) {
+        console.error('Bank administrator lookup failed:', error.message);
+        res.status(500).json({ message: 'Unable to verify bank administrator access' });
+        return null;
+    }
+}
+
+async function listBankMembers(req, res) {
+    const bankAdmin = await getAssignedBankAdmin(req, res);
+    if (!bankAdmin) return;
+
+    try {
+        const members = await User.find({
+            role: 'user',
+            customerBankId: bankAdmin.bankId,
+            branchId: bankAdmin.branchId
+        })
+            .select('name email isVerified isApproved createdAt')
+            .sort({ createdAt: -1 });
+        return res.status(200).json({ members });
+    } catch (error) {
+        console.error('Bank member list failed:', error.message);
+        return res.status(500).json({ message: 'Unable to load bank members' });
+    }
+}
+
+async function createBankMember(req, res) {
+    const bankAdmin = await getAssignedBankAdmin(req, res);
+    if (!bankAdmin) return;
+    const input = readRegistrationInput(req.body);
+    if (input.error) return res.status(400).json({ message: input.error });
+
+    const result = await createPendingUser({
+        ...input,
+        bankId: bankAdmin.bankId,
+        branchId: bankAdmin.branchId,
+        role: 'user',
+        accountLabel: 'Member account'
+    });
+    return res.status(result.status).json({ message: result.message });
+}
+
+async function activateBankMember(req, res) {
+    const bankAdmin = await getAssignedBankAdmin(req, res);
+    if (!bankAdmin) return;
+    if ((bankAdmin.staffRole || 'branch_manager') !== 'branch_manager') {
+        return res.status(403).json({ message: 'Only the Branch Manager can approve and activate bank members' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(req.params.memberId)) {
+        return res.status(400).json({ message: 'A valid bank member is required' });
+    }
+
+    try {
+        const member = await User.findOne({
+            _id: req.params.memberId,
+            role: 'user',
+            customerBankId: bankAdmin.bankId,
+            branchId: bankAdmin.branchId
+        });
+        if (!member) return res.status(404).json({ message: 'Bank member not found' });
+        if (member.isApproved) {
+            return res.status(200).json({ message: 'Bank member is already active', member });
+        }
+
+        member.isVerified = true;
+        member.isApproved = true;
+        member.otpHash = undefined;
+        member.otpExpiresAt = undefined;
+        await member.save();
+        return res.status(200).json({ message: 'Bank member approved and activated successfully', member });
+    } catch (error) {
+        console.error('Bank member activation failed:', error.message);
+        return res.status(500).json({ message: 'Unable to approve and activate bank member' });
     }
 }
 
 async function resendOtp(req, res) {
     const email = req.body.email?.trim().toLowerCase();
-    if (!email) {
-        return res.status(400).json({ message: 'Email is required' });
-    }
+    if (!email) return res.status(400).json({ message: 'Email is required' });
 
     try {
         const user = await User.findOne({ email });
@@ -67,7 +237,6 @@ async function resendOtp(req, res) {
         user.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
         await user.save();
         await sendOtpEmail(email, otp);
-
         return res.status(202).json({ message: 'A new verification code has been sent.' });
     } catch (error) {
         console.error('OTP resend failed:', { message: error.message, code: error.code, responseCode: error.responseCode });
@@ -77,7 +246,6 @@ async function resendOtp(req, res) {
 
 async function verifyOtp(req, res) {
     const { otp } = req.body;
-
     if (!otp || !/^\d{6}$/.test(String(otp))) {
         return res.status(400).json({ message: 'A valid 6-digit OTP is required' });
     }
@@ -89,18 +257,15 @@ async function verifyOtp(req, res) {
             otpExpiresAt: { $gt: new Date() },
             isVerified: false
         });
-
-        if (!user) {
-            return res.status(400).json({ message: 'Invalid or expired OTP' });
-        }
+        if (!user) return res.status(400).json({ message: 'Invalid or expired OTP' });
 
         user.isVerified = true;
         user.otpHash = undefined;
         user.otpExpiresAt = undefined;
         await user.save();
-
         return res.status(200).json({ message: 'Email verified successfully' });
     } catch (error) {
+        console.error('OTP verification failed:', error.message);
         return res.status(500).json({ message: 'Error verifying OTP' });
     }
 }
@@ -120,6 +285,9 @@ async function loginUser(req, res) {
         }
         if (!user.isVerified) {
             return res.status(403).json({ message: 'Verify your email before logging in' });
+        }
+        if (user.role === 'user' && !user.isApproved) {
+            return res.status(403).json({ message: 'Your bank membership is awaiting Branch Manager approval' });
         }
         if (!await bcrypt.compare(password, user.password)) {
             return res.status(401).json({ message: 'Invalid credentials' });
@@ -183,6 +351,7 @@ async function activateUser(req, res) {
         }
 
         user.isVerified = true;
+        user.isApproved = true;
         user.otpHash = undefined;
         user.otpExpiresAt = undefined;
         await user.save();
@@ -195,7 +364,7 @@ async function activateUser(req, res) {
 }
 
 async function updateUser(req, res) {
-    const { name, email, role, isVerified, bankId, branchId } = req.body;
+    const { name, email, role, staffRole, isVerified, bankId, branchId } = req.body;
     const updates = {};
 
     if (name !== undefined) updates.name = String(name).trim();
@@ -205,6 +374,12 @@ async function updateUser(req, res) {
             return res.status(400).json({ message: 'Role must be user, employee, or admin' });
         }
         updates.role = role;
+    }
+    if (staffRole !== undefined) {
+        if (!['branch_manager', 'general_manager', 'hr_manager', 'finance_manager', 'accounts_manager'].includes(staffRole)) {
+            return res.status(400).json({ message: 'Select a valid bank staff role' });
+        }
+        updates.staffRole = staffRole;
     }
     if (isVerified !== undefined) updates.isVerified = Boolean(isVerified);
     if (bankId !== undefined) {
@@ -241,6 +416,9 @@ async function updateUser(req, res) {
         if (updates.role && updates.role !== 'employee') {
             updates.bankId = null;
             updates.branchId = null;
+            updates.staffRole = null;
+        } else if (updates.role === 'employee' && updates.staffRole === undefined && currentUser.role !== 'employee') {
+            updates.staffRole = 'branch_manager';
         }
 
         if (updates.bankId || updates.branchId) {
@@ -255,6 +433,9 @@ async function updateUser(req, res) {
                 : (updates.bankId ? null : currentUser.branchId);
             if (selectedBranchId && !bank.branches.id(selectedBranchId)) {
                 return res.status(400).json({ message: 'The selected branch does not belong to this bank' });
+            }
+            if (updates.staffRole && (updates.role || currentUser.role) !== 'employee') {
+                return res.status(400).json({ message: 'Only employee accounts can have a bank staff role' });
             }
         }
 
@@ -327,7 +508,12 @@ async function updateMyProfile(req, res) {
 }
 
 module.exports = {
-    createUser,
+    createBankAdmin,
+    createBankStaff,
+    listBankStaff,
+    listBankMembers,
+    createBankMember,
+    activateBankMember,
     resendOtp,
     verifyOtp,
     loginUser,

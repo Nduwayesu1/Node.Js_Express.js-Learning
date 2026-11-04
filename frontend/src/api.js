@@ -28,14 +28,23 @@ const apiRequest = async (path, options = {}) => {
   const isJson = response.headers.get('content-type')?.includes('application/json');
   const data = isJson ? await response.json().catch(() => ({})) : {};
   if (!response.ok) {
-    throw new Error(data.message || `API request failed with HTTP ${response.status}. Check the backend route and CORS configuration.`);
+    const request = `${options.method || 'GET'} ${path}`;
+    const defaultMessage = response.status === 404
+      ? `API route not found: ${request}. Deploy the latest backend routes and confirm VITE_API_URL points to that backend.`
+      : `API request failed with HTTP ${response.status} for ${request}. Check the backend route and CORS configuration.`;
+    throw new Error(data.message || defaultMessage);
   }
   if (!isJson) throw new Error('The API returned an unexpected non-JSON response.');
 
   return data;
 };
 
-export const register = (body) => apiRequest('/api/users', { method: 'POST', body });
+export const createBankAdmin = (token, body) => apiRequest('/api/users/bank-admins', { method: 'POST', token, body });
+export const getBankMembers = (token) => apiRequest('/api/users/members', { token });
+export const createBankMember = (token, body) => apiRequest('/api/users/members', { method: 'POST', token, body });
+export const activateBankMember = (token, memberId) => apiRequest(`/api/users/members/${memberId}/activate`, { method: 'PATCH', token });
+export const getBankStaff = (token) => apiRequest('/api/users/staff', { token });
+export const createBankStaff = (token, body) => apiRequest('/api/users/staff', { method: 'POST', token, body });
 export const resendOtp = (email) => apiRequest('/api/users/resend-otp', { method: 'POST', body: { email } });
 export const verifyOtp = (otp) => apiRequest('/api/users/verify-otp', { method: 'POST', body: { otp } });
 export const login = (body) => apiRequest('/api/users/login', { method: 'POST', body });
@@ -50,6 +59,7 @@ export const updateUser = (token, userId, body) => apiRequest(`/api/users/${user
 export const deleteUser = (token, userId) => apiRequest(`/api/users/${userId}`, { method: 'DELETE', token });
 export const getBanks = (token) => apiRequest('/api/banks', { token });
 export const getAvailableBanks = (token) => apiRequest('/api/banks/available', { token });
+export const getAssignedBank = (token) => apiRequest('/api/banks/assigned', { token });
 export const createBank = (token, body) => apiRequest('/api/banks', { method: 'POST', token, body });
 export const addBankBranch = (token, bankId, body) => apiRequest(`/api/banks/${bankId}/branches`, { method: 'POST', token, body });
 export const getBankAccounts = (token, params = {}) => {
@@ -57,7 +67,10 @@ export const getBankAccounts = (token, params = {}) => {
   return apiRequest(`/api/bank-accounts${query.toString() ? `?${query}` : ''}`, { token });
 };
 export const getMyBankAccounts = (token) => apiRequest('/api/bank-accounts/me', { token });
-export const getTransferRecipient = (token, accountNumber) => apiRequest(`/api/bank-accounts/recipients/${encodeURIComponent(accountNumber)}`, { token });
+export const searchTransferRecipients = (token, name) => {
+  const query = new URLSearchParams({ name });
+  return apiRequest(`/api/bank-accounts/recipients?${query}`, { token });
+};
 export const createBankAccount = (token, body) => apiRequest('/api/bank-accounts', { method: 'POST', token, body });
 export const depositToBankAccount = (token, accountId, amount, phoneNumber) => apiRequest(`/api/bank-accounts/${accountId}/deposits`, { method: 'POST', token, body: { amount, phoneNumber } });
 export const updateBankAccountStatus = (token, accountId, status) => apiRequest(`/api/bank-accounts/${accountId}/status`, { method: 'PATCH', token, body: { status } });

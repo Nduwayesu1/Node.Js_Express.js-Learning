@@ -23,6 +23,10 @@ const userSchema = new Schema(
           type: Boolean,
           default: false
         },
+        isApproved: {
+          type: Boolean,
+          default: true
+        },
         otpHash: {
           type: String
         },
@@ -34,7 +38,15 @@ const userSchema = new Schema(
         enum: ['user', 'admin','employee'],
         default: 'user'
       },
+      staffRole: {
+        type: String,
+        enum: ['branch_manager', 'general_manager', 'hr_manager', 'finance_manager', 'accounts_manager']
+      },
       bankId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Bank'
+      },
+      customerBankId: {
         type: Schema.Types.ObjectId,
         ref: 'Bank'
       },

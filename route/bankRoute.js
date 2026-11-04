@@ -6,6 +6,17 @@ const router = express.Router();
 
 /**
  * @swagger
+ * /api/banks/registration:
+ *   get:
+ *     summary: List banks customers can select during registration
+ *     tags: [Banks]
+ *     responses:
+ *       200: { description: Bank names and identifiers returned }
+ */
+router.get('/banks/registration', bankController.listRegistrationBanks);
+
+/**
+ * @swagger
  * /api/payments/paypack/webhook:
  *   post:
  *     summary: Receive a Paypack transaction event
@@ -56,6 +67,21 @@ router.post('/payments/paypack/webhook', bankController.paypackWebhook);
  *       403: { description: Customer access is required }
  */
 router.get('/banks/available', requireAuth, bankController.listAvailableBanks);
+
+/**
+ * @swagger
+ * /api/banks/assigned:
+ *   get:
+ *     summary: Return the authenticated bank employee's assigned bank and sub-branch
+ *     tags: [Banks]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200: { description: Assigned bank and branch returned }
+ *       403: { description: Bank employee must have a bank and sub-branch assignment }
+ *       404: { description: Assigned bank or sub-branch not found }
+ */
+router.get('/banks/assigned', requireAuth, bankController.listAssignedBank);
 
 /**
  * @swagger
@@ -153,17 +179,22 @@ router.post('/banks/:bankId/branches', requireAuth, requireAdmin, bankController
  * /api/bank-accounts:
  *   get:
  *     summary: List bank accounts visible to the authenticated user
- *     description: Customers see their accounts; employees see assigned branch accounts; admins can filter by bank.
+ *     description: Customers see their accounts; employees see assigned sub-branch accounts; admins can filter by bank and sub-branch.
  *     tags: [Bank Accounts]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: bankId
+ *         description: Filter accounts to a bank
+ *         schema: { type: string }
+ *       - in: query
+ *         name: branchId
+ *         description: Filter accounts to a sub-branch within the selected bank
  *         schema: { type: string }
  *     responses:
  *       200: { description: Accounts returned }
- *       400: { description: Invalid bank identifier }
+ *       400: { description: Invalid bank or sub-branch identifier }
  *       403: { description: Caller cannot access these accounts }
  */
 router.get('/bank-accounts', requireAuth, bankController.listBankAccounts);
@@ -183,36 +214,38 @@ router.get('/bank-accounts/me', requireAuth, bankController.listBankAccountsForU
 
 /**
  * @swagger
- * /api/bank-accounts/recipients/{accountNumber}:
+ * /api/bank-accounts/recipients:
  *   get:
- *     summary: Verify a transfer recipient
- *     description: Returns the recipient name and account number masked to its first and last three digits.
+ *     summary: Search for transfer recipients by name
+ *     description: Returns up to 10 matching active recipient accounts, with internal account IDs and masked account numbers.
  *     tags: [Transfers]
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: path
- *         name: accountNumber
+ *       - in: query
+ *         name: name
  *         required: true
- *         description: Full 12-digit account number
- *         schema: { type: string, pattern: '^[0-9]{12}$', example: '123456789012' }
+ *         description: At least the first two characters of the recipient's name
+ *         schema: { type: string, minLength: 2, maxLength: 40, example: Jane }
  *     responses:
  *       200:
- *         description: Active recipient verified
+ *         description: Matching recipients returned
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 recipient:
- *                   type: object
- *                   properties:
- *                     name: { type: string, example: Jane Doe }
- *                     accountNumber: { type: string, example: '123******012' }
- *       400: { description: Invalid account number }
- *       404: { description: Active recipient account not found }
+ *                 recipients:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       accountId: { type: string }
+ *                       name: { type: string, example: Jane Doe }
+ *                       accountNumber: { type: string, example: '123******012' }
+ *       400: { description: Search text is shorter than 2 or longer than 40 characters }
  */
-router.get('/bank-accounts/recipients/:accountNumber', requireAuth, bankController.lookupTransferRecipient);
+router.get('/bank-accounts/recipients', requireAuth, bankController.searchTransferRecipients);
 
 /**
  * @swagger
@@ -310,7 +343,7 @@ router.patch('/bank-accounts/:accountId/status', requireAuth, bankController.upd
  * /api/bank-accounts/transfer:
  *   post:
  *     summary: Transfer funds between bank accounts
- *     description: Transfers whole-number RWF between active accounts. Verify the recipient first with GET /api/bank-accounts/recipients/{accountNumber}.
+ *     description: Transfers whole-number RWF between active accounts. Search for and select a recipient first with GET /api/bank-accounts/recipients?name={name}.
  *     tags: [Transfers]
  *     security:
  *       - bearerAuth: []
@@ -320,10 +353,10 @@ router.patch('/bank-accounts/:accountId/status', requireAuth, bankController.upd
  *         application/json:
  *           schema:
  *             type: object
- *             required: [fromAccountId, toAccountNumber, amount]
+ *             required: [fromAccountId, toAccountId, amount]
  *             properties:
  *               fromAccountId: { type: string }
- *               toAccountNumber: { type: string, pattern: '^[0-9]{12}$', example: '123456789012' }
+ *               toAccountId: { type: string, description: Selected recipient account ID }
  *               amount: { type: integer, minimum: 1, example: 2500 }
  *               description: { type: string, maxLength: 120, example: Rent payment }
  *     responses:

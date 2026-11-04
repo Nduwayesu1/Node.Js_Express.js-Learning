@@ -14,10 +14,11 @@ function isMissingAccountNumber(value) {
 async function canManageBankAccount(user, account) {
     if (user.role === 'admin') return true;
     if (user.role !== 'employee') return false;
-    const manager = await User.findById(user.id).select('role bankId branchId').lean();
+    const manager = await User.findById(user.id).select('role staffRole bankId branchId').lean();
     return manager?.role === 'employee'
+        && manager.staffRole === 'accounts_manager'
         && String(manager.bankId || '') === String(account.bankId)
-        && (!manager.branchId || String(manager.branchId) === String(account.branchId));
+        && String(manager.branchId || '') === String(account.branchId);
 }
 
 async function listBanks(_req, res) {
@@ -55,13 +56,49 @@ async function listBanks(_req, res) {
 async function listAvailableBanks(req, res) {
     if (req.user.role !== 'user') return res.status(403).json({ message: 'Customer access is required' });
     try {
-        const banks = await Bank.find()
+        const customer = await User.findById(req.user.id).select('customerBankId').lean();
+        const filter = customer?.customerBankId ? { _id: customer.customerBankId } : {};
+        const banks = await Bank.find(filter)
             .select('bankName branches._id branches.branchName branches.branchCode branches.location')
             .sort({ bankName: 1 });
         return res.status(200).json({ banks });
     } catch (error) {
         console.error('Available bank list failed:', error.message);
         return res.status(500).json({ message: 'Unable to load available banks' });
+    }
+}
+
+async function listAssignedBank(req, res) {
+    if (req.user.role !== 'employee') {
+        return res.status(403).json({ message: 'Bank staff access is required' });
+    }
+
+    try {
+        const employee = await User.findById(req.user.id).select('role bankId branchId').lean();
+        if (!employee?.bankId || !employee?.branchId) {
+            return res.status(403).json({ message: 'Your account is not assigned to a bank sub-branch' });
+        }
+
+        const bank = await Bank.findById(employee.bankId).select('bankName accountNumber leadership branches').lean();
+        const branch = bank?.branches.find((item) => String(item._id) === String(employee.branchId));
+        if (!branch) return res.status(404).json({ message: 'Your assigned sub-branch was not found' });
+        return res.status(200).json({ banks: [{ ...bank, branches: [branch] }] });
+    } catch (error) {
+        console.error('Assigned bank lookup failed:', error.message);
+        return res.status(500).json({ message: 'Unable to load your assigned bank' });
+    }
+}
+
+async function listRegistrationBanks(_req, res) {
+    try {
+        const banks = await Bank.find()
+            .select('bankName')
+            .sort({ bankName: 1 })
+            .lean();
+        return res.status(200).json({ banks });
+    } catch (error) {
+        console.error('Registration bank list failed:', error.message);
+        return res.status(500).json({ message: 'Unable to load banks for registration' });
     }
 }
 
@@ -170,6 +207,12 @@ async function createBankAccount(req, res) {
 
         const branch = bank.branches.find((item) => String(item._id) === String(branchId));
         if (!branch) return res.status(400).json({ message: 'The selected branch does not belong to this bank.' });
+        if (req.user.role === 'user') {
+            const customer = await User.findById(req.user.id).select('customerBankId').lean();
+            if (customer?.customerBankId && String(customer.customerBankId) !== String(bankId)) {
+                return res.status(403).json({ message: 'You can only open accounts at the bank you registered with.' });
+            }
+        }
 
         const usedNumbers = new Set((await BankAccount.find({}, 'accountNumber').lean()).map((entry) => entry.accountNumber));
         const accountNumber = generateAccountNumber(usedNumbers);
@@ -195,23 +238,34 @@ async function createBankAccount(req, res) {
 }
 
 async function listBankAccounts(req, res) {
-    const { bankId } = req.query;
+    const { bankId, branchId } = req.query;
     if (bankId && !mongoose.Types.ObjectId.isValid(bankId)) {
         return res.status(400).json({ message: 'A valid bank is required.' });
     }
+    if (branchId && (!mongoose.Types.ObjectId.isValid(branchId) || !bankId)) {
+        return res.status(400).json({ message: 'Select a valid bank and sub-branch.' });
+    }
     try {
-        const filter = bankId ? { bankId } : {};
+        const filter = { ...(bankId ? { bankId } : {}), ...(branchId ? { branchId } : {}) };
         if (req.user.role === 'employee') {
-            const manager = await User.findById(req.user.id).select('role bankId branchId').lean();
-            if (manager?.role !== 'employee' || !manager.bankId || (bankId && String(bankId) !== String(manager.bankId))) {
-                return res.status(403).json({ message: 'You can only view accounts assigned to your bank.' });
+            const manager = await User.findById(req.user.id).select('role staffRole bankId branchId').lean();
+            if (!['branch_manager', 'general_manager', 'accounts_manager'].includes(manager?.staffRole || 'branch_manager')) {
+                return res.status(403).json({ message: 'Bank account reports are not available for your bank staff role.' });
+            }
+            if (manager?.role !== 'employee' || !manager.bankId || !manager.branchId
+                || (bankId && String(bankId) !== String(manager.bankId))
+                || (branchId && String(branchId) !== String(manager.branchId))) {
+                return res.status(403).json({ message: 'You can only view accounts assigned to your bank sub-branch.' });
             }
             filter.bankId = manager.bankId;
-            if (manager.branchId) filter.branchId = manager.branchId;
+            filter.branchId = manager.branchId;
         } else if (req.user.role === 'user') {
             filter.userId = req.user.id;
         } else if (req.user.role !== 'admin') {
             return res.status(403).json({ message: 'You do not have access to bank accounts.' });
+        }
+        if (branchId && !await Bank.exists({ _id: bankId, 'branches._id': branchId })) {
+            return res.status(400).json({ message: 'The selected sub-branch does not belong to this bank.' });
         }
 
         const accounts = await BankAccount.find(filter)
@@ -255,28 +309,34 @@ async function getBankAccountTransactions(req, res) {
     }
 }
 
-async function lookupTransferRecipient(req, res) {
-    const accountNumber = String(req.params.accountNumber || '');
-    if (!/^\d{12}$/.test(accountNumber)) {
-        return res.status(400).json({ message: 'Enter a valid 12-digit recipient account number.' });
+async function searchTransferRecipients(req, res) {
+    const name = typeof req.query.name === 'string' ? req.query.name.trim() : '';
+    if (name.length < 2 || name.length > 40) {
+        return res.status(400).json({ message: 'Enter at least 2 and no more than 40 characters of the recipient name.' });
     }
 
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     try {
-        const account = await BankAccount.findOne({ accountNumber, status: 'active' }).select('accountNumber userId').lean();
-        if (!account) return res.status(404).json({ message: 'An active recipient account was not found.' });
+        const matchingUsers = await User.find({
+            name: new RegExp(`^${escapedName}`, 'i')
+        }).select('_id name').sort({ name: 1 }).limit(20).lean();
+        if (!matchingUsers.length) return res.status(200).json({ recipients: [] });
 
-        const recipient = await User.findById(account.userId).select('name').lean();
-        if (!recipient?.name) return res.status(404).json({ message: 'An active recipient account was not found.' });
+        const namesByUserId = new Map(matchingUsers.map((user) => [String(user._id), user.name]));
+        const accounts = await BankAccount.find({
+            userId: { $in: matchingUsers.map((user) => user._id) },
+            status: 'active'
+        }).select('_id accountNumber userId').sort({ accountNumber: 1 }).limit(20).lean();
+        const recipients = accounts.slice(0, 10).map((account) => ({
+            accountId: account._id,
+            name: namesByUserId.get(String(account.userId)),
+            accountNumber: maskAccountNumber(account.accountNumber)
+        }));
 
-        return res.status(200).json({
-            recipient: {
-                name: recipient.name,
-                accountNumber: maskAccountNumber(account.accountNumber)
-            }
-        });
+        return res.status(200).json({ recipients });
     } catch (error) {
-        console.error('Transfer recipient lookup failed:', error.message);
-        return res.status(500).json({ message: 'Unable to verify the recipient account.' });
+        console.error('Transfer recipient search failed:', error.message);
+        return res.status(500).json({ message: 'Unable to search recipient accounts.' });
     }
 }
 
@@ -471,11 +531,13 @@ async function paypackWebhook(req, res) {
 }
 
 async function transferBetweenAccounts(req, res) {
-    const { fromAccountId, toAccountNumber, amount, description } = req.body;
+    const { fromAccountId, toAccountId, toAccountNumber, amount, description } = req.body;
     const transferAmount = Number(amount);
 
-    if (!mongoose.Types.ObjectId.isValid(fromAccountId) || !/^\d{12}$/.test(String(toAccountNumber || ''))) {
-        return res.status(400).json({ message: 'A valid source account and 12-digit destination account number are required.' });
+    const hasRecipientAccountId = mongoose.Types.ObjectId.isValid(toAccountId);
+    const hasRecipientAccountNumber = /^\d{12}$/.test(String(toAccountNumber || ''));
+    if (!mongoose.Types.ObjectId.isValid(fromAccountId) || (!hasRecipientAccountId && !hasRecipientAccountNumber)) {
+        return res.status(400).json({ message: 'A valid source account and recipient account are required.' });
     }
 
     if (!Number.isSafeInteger(transferAmount) || transferAmount <= 0) {
@@ -487,7 +549,9 @@ async function transferBetweenAccounts(req, res) {
         let transferResult;
         await session.withTransaction(async () => {
             const fromAccount = await BankAccount.findById(fromAccountId).session(session);
-            const toAccount = await BankAccount.findOne({ accountNumber: toAccountNumber }).session(session);
+            const toAccount = hasRecipientAccountId
+                ? await BankAccount.findById(toAccountId).session(session)
+                : await BankAccount.findOne({ accountNumber: toAccountNumber }).session(session);
 
             if (!fromAccount || !toAccount) throw new Error('BANK_ACCOUNT_NOT_FOUND');
             if (String(fromAccount.userId) !== String(req.user.id)) throw new Error('SOURCE_ACCOUNT_NOT_OWNED');
@@ -566,14 +630,16 @@ async function updateBankAccountStatus(req, res) {
 
 module.exports = {
     listBanks,
+    listRegistrationBanks,
     listAvailableBanks,
+    listAssignedBank,
     createBank,
     addBranch,
     createBankAccount,
     listBankAccounts,
     listBankAccountsForUser,
     getBankAccountTransactions,
-    lookupTransferRecipient,
+    searchTransferRecipients,
     depositToBankAccount,
     paypackWebhook,
     transferBetweenAccounts,
