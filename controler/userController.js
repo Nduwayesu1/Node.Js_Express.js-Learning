@@ -46,6 +46,7 @@ async function createPendingUser({ name, email, password, bankId, branchId, role
         user.role = role;
         user.isVerified = false;
         user.isApproved = role !== 'user';
+        user.isActive = true;
         if (role === 'employee') {
             user.bankId = bank._id;
             user.branchId = branchId;
@@ -125,12 +126,19 @@ async function listBankStaff(req, res) {
     if (!bankAdmin) return;
 
     try {
-        const staff = await User.find({
-            role: 'employee',
-            bankId: bankAdmin.bankId,
-            branchId: bankAdmin.branchId
-        }).select('name email staffRole isVerified createdAt').sort({ staffRole: 1, name: 1 });
-        return res.status(200).json({ staff });
+        const [staff, bank] = await Promise.all([
+            User.find({
+                role: 'employee',
+                bankId: bankAdmin.bankId
+            }).select('name email staffRole bankId branchId isVerified isActive createdAt').sort({ staffRole: 1, name: 1 }).lean(),
+            Bank.findById(bankAdmin.bankId).select('branches._id branches.branchName branches.branchCode').lean()
+        ]);
+        const branchesById = new Map((bank?.branches || []).map((branch) => [String(branch._id), branch]));
+        const bankStaff = staff.map((employee) => ({
+            ...employee,
+            branch: branchesById.get(String(employee.branchId)) || null
+        }));
+        return res.status(200).json({ staff: bankStaff });
     } catch (error) {
         console.error('Bank staff list failed:', error.message);
         return res.status(500).json({ message: 'Unable to load bank staff' });
@@ -159,14 +167,22 @@ async function listBankMembers(req, res) {
     if (!bankAdmin) return;
 
     try {
-        const members = await User.find({
-            role: 'user',
-            customerBankId: bankAdmin.bankId,
-            branchId: bankAdmin.branchId
-        })
-            .select('name email isVerified isApproved createdAt')
-            .sort({ createdAt: -1 });
-        return res.status(200).json({ members });
+        const [members, bank] = await Promise.all([
+            User.find({
+                role: 'user',
+                customerBankId: bankAdmin.bankId
+            })
+                .select('name email isVerified isApproved isActive branchId createdAt')
+                .sort({ createdAt: -1 })
+                .lean(),
+            Bank.findById(bankAdmin.bankId).select('branches._id branches.branchName branches.branchCode').lean()
+        ]);
+        const branchesById = new Map((bank?.branches || []).map((branch) => [String(branch._id), branch]));
+        const bankMembers = members.map((member) => ({
+            ...member,
+            branch: branchesById.get(String(member.branchId)) || null
+        }));
+        return res.status(200).json({ members: bankMembers });
     } catch (error) {
         console.error('Bank member list failed:', error.message);
         return res.status(500).json({ message: 'Unable to load bank members' });
@@ -203,16 +219,16 @@ async function activateBankMember(req, res) {
         const member = await User.findOne({
             _id: req.params.memberId,
             role: 'user',
-            customerBankId: bankAdmin.bankId,
-            branchId: bankAdmin.branchId
+            customerBankId: bankAdmin.bankId
         });
         if (!member) return res.status(404).json({ message: 'Bank member not found' });
-        if (member.isApproved) {
+        if (member.isApproved && member.isActive !== false) {
             return res.status(200).json({ message: 'Bank member is already active', member });
         }
 
         member.isVerified = true;
         member.isApproved = true;
+        member.isActive = true;
         member.otpHash = undefined;
         member.otpExpiresAt = undefined;
         await member.save();
@@ -220,6 +236,36 @@ async function activateBankMember(req, res) {
     } catch (error) {
         console.error('Bank member activation failed:', error.message);
         return res.status(500).json({ message: 'Unable to approve and activate bank member' });
+    }
+}
+
+async function deactivateBankMember(req, res) {
+    const bankAdmin = await getAssignedBankAdmin(req, res);
+    if (!bankAdmin) return;
+    if ((bankAdmin.staffRole || 'branch_manager') !== 'branch_manager') {
+        return res.status(403).json({ message: 'Only the Branch Manager can deactivate bank members' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(req.params.memberId)) {
+        return res.status(400).json({ message: 'A valid bank member is required' });
+    }
+
+    try {
+        const member = await User.findOne({
+            _id: req.params.memberId,
+            role: 'user',
+            customerBankId: bankAdmin.bankId
+        });
+        if (!member) return res.status(404).json({ message: 'Bank member not found' });
+        if (member.isActive === false) {
+            return res.status(200).json({ message: 'Bank member is already deactivated', member });
+        }
+
+        member.isActive = false;
+        await member.save();
+        return res.status(200).json({ message: 'Bank member deactivated successfully', member });
+    } catch (error) {
+        console.error('Bank member deactivation failed:', error.message);
+        return res.status(500).json({ message: 'Unable to deactivate bank member' });
     }
 }
 
@@ -285,6 +331,9 @@ async function loginUser(req, res) {
         }
         if (!user.isVerified) {
             return res.status(403).json({ message: 'Verify your email before logging in' });
+        }
+        if (user.isActive === false) {
+            return res.status(403).json({ message: 'Your bank membership is deactivated. Contact your Bank Admin.' });
         }
         if (user.role === 'user' && !user.isApproved) {
             return res.status(403).json({ message: 'Your bank membership is awaiting Branch Manager approval' });
@@ -352,6 +401,7 @@ async function activateUser(req, res) {
 
         user.isVerified = true;
         user.isApproved = true;
+        user.isActive = true;
         user.otpHash = undefined;
         user.otpExpiresAt = undefined;
         await user.save();
@@ -514,6 +564,7 @@ module.exports = {
     listBankMembers,
     createBankMember,
     activateBankMember,
+    deactivateBankMember,
     resendOtp,
     verifyOtp,
     loginUser,

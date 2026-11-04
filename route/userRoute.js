@@ -36,7 +36,7 @@ router.post('/users/bank-admins', requireAuth, requireAdmin, userController.crea
  * @swagger
  * /api/users/members:
  *   get:
- *     summary: List members registered with the authenticated Bank Admin's assigned sub-branch
+ *     summary: List customer members across the authenticated employee's assigned bank
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -64,13 +64,13 @@ router.post('/users/bank-admins', requireAuth, requireAdmin, userController.crea
  *       400: { description: Invalid registration details }
  *       403: { description: Bank Admin must be assigned to a bank sub-branch }
  */
-router.get('/users/members', requireAuth, requireStaffRole('branch_manager', 'general_manager', 'hr_manager'), userController.listBankMembers);
+router.get('/users/members', requireAuth, requireStaffRole('branch_manager', 'general_manager', 'hr_manager', 'finance_manager'), userController.listBankMembers);
 router.post('/users/members', requireAuth, requireStaffRole('branch_manager'), userController.createBankMember);
 /**
  * @swagger
  * /api/users/staff:
  *   get:
- *     summary: List bank employees assigned to the authenticated employee's sub-branch
+ *     summary: List employees across the authenticated employee's assigned bank
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -99,14 +99,14 @@ router.post('/users/members', requireAuth, requireStaffRole('branch_manager'), u
  *       400: { description: Invalid registration details or staff role }
  *       403: { description: Branch Manager access is required }
  */
-router.get('/users/staff', requireAuth, requireStaffRole('branch_manager', 'general_manager', 'hr_manager'), userController.listBankStaff);
+router.get('/users/staff', requireAuth, requireStaffRole('branch_manager', 'general_manager', 'hr_manager', 'finance_manager'), userController.listBankStaff);
 router.post('/users/staff', requireAuth, requireStaffRole('branch_manager'), userController.createBankStaff);
 
 /**
  * @swagger
  * /api/users/members/{memberId}/activate:
  *   patch:
- *     summary: Approve and activate a member of the authenticated Branch Manager's assigned sub-branch
+ *     summary: Approve and activate a member of the authenticated Branch Manager's assigned bank
  *     description: Marks the member approved and verified so they can sign in without entering their emailed OTP.
  *     tags: [Users]
  *     security:
@@ -123,6 +123,27 @@ router.post('/users/staff', requireAuth, requireStaffRole('branch_manager'), use
  *       404: { description: Bank member not found in the administrator's bank }
  */
 router.patch('/users/members/:memberId/activate', requireAuth, requireStaffRole('branch_manager'), userController.activateBankMember);
+
+/**
+ * @swagger
+ * /api/users/members/{memberId}/deactivate:
+ *   patch:
+ *     summary: Deactivate a member of the authenticated Branch Manager's assigned bank
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: memberId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Bank member deactivated }
+ *       400: { description: Invalid bank member identifier }
+ *       403: { description: Branch Manager access is required }
+ *       404: { description: Bank member not found in the administrator's bank }
+ */
+router.patch('/users/members/:memberId/deactivate', requireAuth, requireStaffRole('branch_manager'), userController.deactivateBankMember);
 
 /**
  * @swagger

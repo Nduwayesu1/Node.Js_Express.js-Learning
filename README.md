@@ -6,9 +6,11 @@ The interactive Swagger UI is available at `/api-docs` and the generated OpenAPI
 
 ## Bank administrators and members
 
-Public self-signup is disabled. The global administrator registers a Bank Admin with a bank and sub-branch assignment. The Bank Admin can register, list, and approve/activate only members assigned to that sub-branch. Member bank and sub-branch assignments are derived by the backend from the authenticated Bank Admin; the client cannot choose another scope. OTP email verification remains enabled. Members must verify their email and receive Branch Manager approval before signing in; Branch Manager approval can also activate a pending member directly.
+Public self-signup is disabled. The global administrator registers a Bank Admin with a bank and sub-branch assignment. The Bank Admin can register customer members in their assigned sub-branch, view the bank-wide employee and customer-member directories, and approve/activate or deactivate any customer member in that bank. Finance Managers have view-only access to the same bank-wide directory. Data queries and member actions are scoped to the authenticated employee's bank; the client cannot choose another bank. OTP email verification remains enabled. Members must verify their email and receive Branch Manager approval before signing in; Branch Manager approval can also activate a pending member directly. Deactivated members are blocked from login and authenticated API access until the Bank Admin reactivates them.
 
-Deploy the backend whenever these API routes change. The deployed API's `/api-docs.json` should include `/api/users/bank-admins`, `/api/users/members`, and `PATCH /api/users/members/{memberId}/activate`; otherwise the running backend is behind the frontend. The frontend's `VITE_API_URL` must point to the deployed backend.
+Every bank has a unique 12-digit bank account number. Each sub-branch is assigned a unique branch code derived from the bank number; both identifiers are shown in bank and branch selection controls.
+
+Deploy the backend whenever these API routes change. The deployed API's `/api-docs.json` should include `/api/users/bank-admins`, `/api/users/members`, and the member `activate` and `deactivate` endpoints; otherwise the running backend is behind the frontend. The frontend's `VITE_API_URL` must point to the deployed backend.
 
 ## Loan finance
 
@@ -28,13 +30,13 @@ Loan applications, decisions, repayments, and defaults are stored in MongoDB and
 
 The System Admin can view and filter bank accounts and deposit history across every bank and sub-branch, inspect bank profiles and staff, and manage user roles and bank assignments. Employee accounts are assigned a bank and sub-branch. Each bank role has a scoped dashboard:
 
-- Branch Manager / Bank Admin: register and approve branch members, create branch staff, and review loan applications.
+- Branch Manager / Bank Admin: register branch members, approve/activate or deactivate bank-wide customer members, view bank-wide employees, create branch staff, review loan applications, and inspect member accounts in their assigned sub-branch.
 - General Manager / CEO: read-only branch overview and loan reports.
-- HR Manager: branch staff and member directory.
-- Finance Manager: payroll for verified staff in the assigned sub-branch.
+- HR Manager: bank-wide employee and customer-member directory.
+- Finance Manager: bank-wide employee and customer-member directory (view-only) and payroll for verified staff in the assigned sub-branch.
 - Accounts Manager: assigned sub-branch account ledger and account activation controls.
 
-Branch Managers and Accounts Managers can view member bank-account details for their assigned sub-branch; account activation controls remain limited to Accounts Managers. Role permissions are checked by the backend as well as hidden or shown in the frontend. Staff actions and data are restricted to the employee's assigned sub-branch; only the System Admin can inspect data across all banks.
+Branch Managers and Accounts Managers can view member bank-account details for their assigned sub-branch; account activation controls remain limited to Accounts Managers. Customer dashboards provide account and balance information, transfers, deposits, loan applications and tracking, transaction history, and profile management. Role permissions are checked by the backend as well as hidden or shown in the frontend. Member directories and member status actions are bank-scoped; staff creation, payroll, and account controls remain restricted to their existing assigned sub-branch permissions. Only the System Admin can inspect data across all banks.
 
 The notification bell records successful application activity (such as registrations, approvals, account changes, payroll batches, and loan actions) in the browser's activity history. Selecting "View all" opens the complete saved activity list; request errors remain in their normal error messages and are not added as notifications.
 

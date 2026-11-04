@@ -59,7 +59,7 @@ async function listAvailableBanks(req, res) {
         const customer = await User.findById(req.user.id).select('customerBankId').lean();
         const filter = customer?.customerBankId ? { _id: customer.customerBankId } : {};
         const banks = await Bank.find(filter)
-            .select('bankName branches._id branches.branchName branches.branchCode branches.location')
+            .select('bankName accountNumber branches._id branches.branchName branches.branchCode branches.location')
             .sort({ bankName: 1 });
         return res.status(200).json({ banks });
     } catch (error) {

@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../modle/User');
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
     const authorization = req.headers.authorization;
     const token = authorization && authorization.startsWith('Bearer ')
         ? authorization.slice(7)
@@ -17,10 +17,23 @@ function requireAuth(req, res, next) {
         }
 
         req.user = jwt.verify(token, process.env.JWT_SECRET);
-        return next();
     } catch (error) {
         return res.status(401).json({ message: 'Invalid or expired token' });
     }
+
+    if (req.user.role === 'user') {
+        try {
+            const user = await User.findById(req.user.id).select('isActive').lean();
+            if (!user || user.isActive === false) {
+                return res.status(403).json({ message: 'Your bank membership is deactivated' });
+            }
+        } catch (error) {
+            console.error('Member access check failed:', error.message);
+            return res.status(500).json({ message: 'Unable to verify member account status' });
+        }
+    }
+
+    return next();
 }
 
 function requireAdmin(req, res, next) {
