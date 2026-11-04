@@ -21,15 +21,15 @@ async function requireAuth(req, res, next) {
         return res.status(401).json({ message: 'Invalid or expired token' });
     }
 
-    if (req.user.role === 'user') {
+    if (['user', 'employee'].includes(req.user.role)) {
         try {
-            const user = await User.findById(req.user.id).select('isActive').lean();
+            const user = await User.findById(req.user.id).select('role isActive').lean();
             if (!user || user.isActive === false) {
-                return res.status(403).json({ message: 'Your bank membership is deactivated' });
+                return res.status(403).json({ message: 'Your account is deactivated' });
             }
         } catch (error) {
-            console.error('Member access check failed:', error.message);
-            return res.status(500).json({ message: 'Unable to verify member account status' });
+            console.error('Account access check failed:', error.message);
+            return res.status(500).json({ message: 'Unable to verify account status' });
         }
     }
 

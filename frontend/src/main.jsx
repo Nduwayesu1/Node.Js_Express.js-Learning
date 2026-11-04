@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ArrowDownToLine, ArrowRight, AtSign, Bell, Building2, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Clock3, HandCoins, LayoutDashboard, LockKeyhole, LogOut, Menu, ShieldCheck, UserPlus, UserRound, UsersRound, Wallet, X } from 'lucide-react';
-import { activateBankMember, activateUser, addBankBranch, createBank, createBankAccount, createBankAdmin, createBankMember, createBankStaff, createLoan, createPayrollBatch, deactivateBankMember, decideLoan, deleteUser, depositToBankAccount, getAssignedBank, getAvailableBanks, getBankAccountTransactions, getBankAccounts, getBankMembers, getBankStaff, getBanks, getFinanceBanks, getLoans, getMyBankAccounts, getPayrollBatches, getPayrollEmployees, getProfile, getRwandaCells, getRwandaDistricts, getRwandaProvinces, getRwandaSectors, getRwandaVillages, getUsers, login, markLoanDefaulted, recordLoanRepayment, resendOtp, searchTransferRecipients, transferBetweenAccounts, updateBankAccountStatus, updateProfile, updateUser, verifyOtp } from './api';
+import { activateBankMember, activateBankStaff, activateUser, addBankBranch, createBank, createBankAccount, createBankAdmin, createBankMember, createBankStaff, createLoan, createPayrollBatch, deactivateBankMember, deactivateBankStaff, decideLoan, deleteUser, depositToBankAccount, getAssignedBank, getAvailableBanks, getBankAccountTransactions, getBankAccounts, getBankMembers, getBankStaff, getBanks, getFinanceBanks, getLoans, getMyBankAccounts, getPayrollBatches, getPayrollEmployees, getProfile, getRwandaCells, getRwandaDistricts, getRwandaProvinces, getRwandaSectors, getRwandaVillages, getUsers, login, markLoanDefaulted, recordLoanRepayment, resendOtp, searchTransferRecipients, transferBetweenAccounts, updateBankAccountStatus, updateProfile, updateUser, verifyOtp } from './api';
 import './styles.css';
 
 const initialForm = { email: '', password: '' };
@@ -1103,14 +1103,36 @@ function BankStaffAdminDashboard({ token, onActivity }) {
   const [staff, setStaff] = useState([]);
   const [form, setForm] = useState({ name: '', email: '', password: '', staffRole: '' });
   const [notice, setNotice] = useState({ type: '', text: '' });
+  const [statusNotice, setStatusNotice] = useState({ type: '', text: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [updatingStaffId, setUpdatingStaffId] = useState('');
 
   async function refreshStaff() {
     const { staff: loadedStaff } = await getBankStaff(token);
     setStaff(loadedStaff);
     setError('');
+  }
+
+  async function updateStaffStatus(employee, activate) {
+    setUpdatingStaffId(employee._id);
+    setStatusNotice({ type: '', text: '' });
+    try {
+      const { staff: updatedStaff } = activate
+        ? await activateBankStaff(token, employee._id)
+        : await deactivateBankStaff(token, employee._id);
+      if (!updatedStaff || updatedStaff.isActive === !activate || (activate && !updatedStaff.isVerified)) {
+        throw new Error(`The server did not confirm employee ${activate ? 'activation' : 'deactivation'}. Refresh the list and try again.`);
+      }
+      setStaff((current) => current.map((item) => item._id === employee._id ? { ...item, ...updatedStaff } : item));
+      setStatusNotice({ type: 'success', text: `${employee.name} was ${activate ? 'activated' : 'deactivated'}.` });
+      onActivity(`A bank employee was ${activate ? 'activated' : 'deactivated'}.`);
+    } catch (statusError) {
+      setStatusNotice({ type: 'error', text: statusError.message });
+    } finally {
+      setUpdatingStaffId('');
+    }
   }
 
   useEffect(() => {
@@ -1145,7 +1167,7 @@ function BankStaffAdminDashboard({ token, onActivity }) {
 
   return <>
     <section className="bank-panel"><div className="bank-panel-heading"><div><span className="eyebrow">BANK TEAM</span><h2>Register bank staff</h2></div><UserPlus size={22} /></div><p className="form-disclaimer">Staff are assigned to your sub-branch. Choose the employee's job role; they must verify their email before signing in.</p><form className="bank-form" onSubmit={handleSubmit}><label htmlFor="staff-name">Full name</label><input className="bank-text-input" id="staff-name" autoComplete="name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /><label htmlFor="staff-email">Email address</label><input className="bank-text-input" id="staff-email" type="email" autoComplete="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /><label htmlFor="staff-password">Temporary password</label><input className="bank-text-input" id="staff-password" type="password" autoComplete="new-password" minLength={8} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required /><label htmlFor="staff-role">Bank role</label><select className="bank-text-input" id="staff-role" value={form.staffRole} onChange={(event) => setForm({ ...form, staffRole: event.target.value })} required><option value="">Select a role</option>{BANK_STAFF_ROLES.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}</select>{notice.text && <Notice notice={notice} />}<button className="bank-button" type="submit" disabled={submitting}>{submitting ? 'Registering staff...' : 'Register staff'}</button></form></section>
-    <section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">BANK-WIDE TEAM</span><h2>Staff and roles</h2></div><UsersRound size={22} /></div>{error && <p className="notice error" role="alert">{error}</p>}{loading ? <p className="empty-state">Loading bank staff...</p> : staff.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Staff member</th><th>Role</th><th>Sub-branch</th><th>Status</th></tr></thead><tbody>{staff.map((employee) => <tr key={employee._id}><td><strong>{employee.name}</strong><br /><small>{employee.email}</small></td><td>{staffRoleName(employee.staffRole)}</td><td>{employee.branch?.branchName || 'Not assigned'}{employee.branch?.branchCode && <><br /><small>{employee.branch.branchCode}</small></>}</td><td><span className={`status ${employee.isVerified && employee.isActive !== false ? 'verified' : ''}`}>{employee.isActive === false ? 'Deactivated' : employee.isVerified ? 'Active' : 'Verification pending'}</span></td></tr>)}</tbody></table></div> : !error && <p className="empty-state">No staff are assigned to this bank.</p>}</section>
+    <section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">BANK-WIDE TEAM</span><h2>Staff and roles</h2></div><UsersRound size={22} /></div>{statusNotice.text && <div className="bank-notice"><Notice notice={statusNotice} /></div>}{error && <p className="notice error" role="alert">{error}</p>}{loading ? <p className="empty-state">Loading bank staff...</p> : staff.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Staff member</th><th>Role</th><th>Sub-branch</th><th>Status</th><th>Access</th></tr></thead><tbody>{staff.map((employee) => { const active = employee.isActive !== false; return <tr key={employee._id}><td><strong>{employee.name}</strong><br /><small>{employee.email}</small></td><td>{staffRoleName(employee.staffRole)}</td><td>{employee.branch?.branchName || 'Not assigned'}{employee.branch?.branchCode && <><br /><small>{employee.branch.branchCode}</small></>}</td><td><span className={`status ${employee.isVerified && active ? 'verified' : ''}`}>{!active ? 'Deactivated' : employee.isVerified ? 'Active' : 'Verification pending'}</span></td><td><button className={active ? 'deactivate-button' : 'activate-button'} type="button" disabled={updatingStaffId === employee._id} onClick={() => updateStaffStatus(employee, !active)}>{updatingStaffId === employee._id ? 'Updating...' : active ? 'Deactivate' : 'Activate'}</button></td></tr>; })}</tbody></table></div> : !error && <p className="empty-state">No staff are assigned to this bank.</p>}</section>
   </>;
 }
 

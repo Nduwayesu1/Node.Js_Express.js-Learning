@@ -145,6 +145,56 @@ async function listBankStaff(req, res) {
     }
 }
 
+async function setBankStaffActiveStatus(req, res, isActive) {
+    const bankAdmin = await getAssignedBankAdmin(req, res);
+    if (!bankAdmin) return;
+    if ((bankAdmin.staffRole || 'branch_manager') !== 'branch_manager') {
+        return res.status(403).json({ message: 'Only the Branch Manager can manage bank staff access' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(req.params.staffId)) {
+        return res.status(400).json({ message: 'A valid bank employee is required' });
+    }
+    if (String(req.params.staffId) === String(bankAdmin._id)) {
+        return res.status(400).json({ message: 'You cannot change your own bank access' });
+    }
+
+    try {
+        const employee = await User.findOne({
+            _id: req.params.staffId,
+            role: 'employee',
+            bankId: bankAdmin.bankId
+        });
+        if (!employee) return res.status(404).json({ message: 'Bank employee not found' });
+        if (employee.isActive === isActive && (!isActive || employee.isVerified)) {
+            return res.status(200).json({ message: `Bank employee is already ${isActive ? 'active' : 'deactivated'}`, staff: employee });
+        }
+
+        employee.isActive = isActive;
+        if (isActive) {
+            employee.isVerified = true;
+            employee.isApproved = true;
+            employee.otpHash = undefined;
+            employee.otpExpiresAt = undefined;
+        }
+        await employee.save();
+        return res.status(200).json({
+            message: `Bank employee ${isActive ? 'activated' : 'deactivated'} successfully`,
+            staff: employee
+        });
+    } catch (error) {
+        console.error(`Bank employee ${isActive ? 'activation' : 'deactivation'} failed:`, error.message);
+        return res.status(500).json({ message: `Unable to ${isActive ? 'activate' : 'deactivate'} bank employee` });
+    }
+}
+
+async function activateBankStaff(req, res) {
+    return setBankStaffActiveStatus(req, res, true);
+}
+
+async function deactivateBankStaff(req, res) {
+    return setBankStaffActiveStatus(req, res, false);
+}
+
 async function getAssignedBankAdmin(req, res) {
     try {
         const bankAdmin = await User.findById(req.user.id).select('role bankId branchId staffRole');
@@ -561,6 +611,8 @@ module.exports = {
     createBankAdmin,
     createBankStaff,
     listBankStaff,
+    activateBankStaff,
+    deactivateBankStaff,
     listBankMembers,
     createBankMember,
     activateBankMember,

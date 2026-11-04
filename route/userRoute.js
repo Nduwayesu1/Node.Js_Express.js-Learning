@@ -104,6 +104,49 @@ router.post('/users/staff', requireAuth, requireStaffRole('branch_manager'), use
 
 /**
  * @swagger
+ * /api/users/staff/{staffId}/activate:
+ *   patch:
+ *     summary: Activate a bank employee in the authenticated Branch Manager's bank
+ *     description: Verifies the employee and clears any pending OTP so they can sign in.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: staffId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Bank employee activated }
+ *       400: { description: Invalid employee identifier or self-management attempt }
+ *       403: { description: Branch Manager access is required }
+ *       404: { description: Employee not found in the administrator's bank }
+ */
+router.patch('/users/staff/:staffId/activate', requireAuth, requireStaffRole('branch_manager'), userController.activateBankStaff);
+
+/**
+ * @swagger
+ * /api/users/staff/{staffId}/deactivate:
+ *   patch:
+ *     summary: Deactivate a bank employee in the authenticated Branch Manager's bank
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: staffId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Bank employee deactivated }
+ *       400: { description: Invalid employee identifier or self-management attempt }
+ *       403: { description: Branch Manager access is required }
+ *       404: { description: Employee not found in the administrator's bank }
+ */
+router.patch('/users/staff/:staffId/deactivate', requireAuth, requireStaffRole('branch_manager'), userController.deactivateBankStaff);
+
+/**
+ * @swagger
  * /api/users/members/{memberId}/activate:
  *   patch:
  *     summary: Approve and activate a member of the authenticated Branch Manager's assigned bank

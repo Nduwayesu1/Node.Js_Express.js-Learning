@@ -46,6 +46,8 @@ export const activateBankMember = (token, memberId) => apiRequest(`/api/users/me
 export const deactivateBankMember = (token, memberId) => apiRequest(`/api/users/members/${memberId}/deactivate`, { method: 'PATCH', token });
 export const getBankStaff = (token) => apiRequest('/api/users/staff', { token });
 export const createBankStaff = (token, body) => apiRequest('/api/users/staff', { method: 'POST', token, body });
+export const activateBankStaff = (token, staffId) => apiRequest(`/api/users/staff/${staffId}/activate`, { method: 'PATCH', token });
+export const deactivateBankStaff = (token, staffId) => apiRequest(`/api/users/staff/${staffId}/deactivate`, { method: 'PATCH', token });
 export const resendOtp = (email) => apiRequest('/api/users/resend-otp', { method: 'POST', body: { email } });
 export const verifyOtp = (otp) => apiRequest('/api/users/verify-otp', { method: 'POST', body: { otp } });
 export const login = (body) => apiRequest('/api/users/login', { method: 'POST', body });
