@@ -74,12 +74,15 @@ async function listAssignedBank(req, res) {
     }
 
     try {
-        const employee = await User.findById(req.user.id).select('role bankId branchId').lean();
-        if (!employee?.bankId || !employee?.branchId) {
-            return res.status(403).json({ message: 'Your account is not assigned to a bank sub-branch' });
+        const employee = await User.findById(req.user.id).select('role staffRole bankId branchId').lean();
+        if (!employee?.bankId || (employee.staffRole !== 'bank_admin' && !employee.branchId)) {
+            return res.status(403).json({ message: 'Your account is not assigned to the required bank scope' });
         }
 
         const bank = await Bank.findById(employee.bankId).select('bankName accountNumber leadership branches').lean();
+        if (employee.staffRole === 'bank_admin') {
+            return res.status(200).json({ banks: bank ? [bank] : [] });
+        }
         const branch = bank?.branches.find((item) => String(item._id) === String(employee.branchId));
         if (!branch) return res.status(404).json({ message: 'Your assigned sub-branch was not found' });
         return res.status(200).json({ banks: [{ ...bank, branches: [branch] }] });
@@ -249,16 +252,17 @@ async function listBankAccounts(req, res) {
         const filter = { ...(bankId ? { bankId } : {}), ...(branchId ? { branchId } : {}) };
         if (req.user.role === 'employee') {
             const manager = await User.findById(req.user.id).select('role staffRole bankId branchId').lean();
-            if (!['branch_manager', 'general_manager', 'accounts_manager'].includes(manager?.staffRole || 'branch_manager')) {
+            if (!['bank_admin', 'branch_manager', 'general_manager', 'accounts_manager'].includes(manager?.staffRole || 'branch_manager')) {
                 return res.status(403).json({ message: 'Bank account reports are not available for your bank staff role.' });
             }
-            if (manager?.role !== 'employee' || !manager.bankId || !manager.branchId
+            const bankWide = manager?.staffRole === 'bank_admin';
+            if (manager?.role !== 'employee' || !manager.bankId || (!bankWide && !manager.branchId)
                 || (bankId && String(bankId) !== String(manager.bankId))
-                || (branchId && String(branchId) !== String(manager.branchId))) {
-                return res.status(403).json({ message: 'You can only view accounts assigned to your bank sub-branch.' });
+                || (!bankWide && branchId && String(branchId) !== String(manager.branchId))) {
+                return res.status(403).json({ message: 'You can only view accounts assigned to your bank scope.' });
             }
             filter.bankId = manager.bankId;
-            filter.branchId = manager.branchId;
+            if (!bankWide) filter.branchId = manager.branchId;
         } else if (req.user.role === 'user') {
             filter.userId = req.user.id;
         } else if (req.user.role !== 'admin') {

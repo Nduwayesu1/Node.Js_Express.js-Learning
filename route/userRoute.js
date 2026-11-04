@@ -8,7 +8,7 @@ const { requireAuth, requireAdmin, requireStaffRole } = require('../middleware/a
  * @swagger
  * /api/users/bank-admins:
  *   post:
- *     summary: Create a bank administrator assigned to a bank sub-branch
+ *     summary: Create a bank administrator for a bank
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -18,16 +18,15 @@ const { requireAuth, requireAdmin, requireStaffRole } = require('../middleware/a
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name, email, password, bankId, branchId]
+ *             required: [name, email, password, bankId]
  *             properties:
  *               name: { type: string }
  *               email: { type: string, format: email }
  *               password: { type: string, minLength: 8 }
  *               bankId: { type: string }
- *               branchId: { type: string }
  *     responses:
  *       202: { description: Bank administrator created and verification code sent }
- *       400: { description: Invalid registration details or bank sub-branch }
+ *       400: { description: Invalid registration details or bank }
  *       403: { description: Administrator access is required }
  */
 router.post('/users/bank-admins', requireAuth, requireAdmin, userController.createBankAdmin);
@@ -36,7 +35,7 @@ router.post('/users/bank-admins', requireAuth, requireAdmin, userController.crea
  * @swagger
  * /api/users/members:
  *   get:
- *     summary: List customer members across the authenticated employee's assigned bank
+ *     summary: List members within the authenticated employee's bank or sub-branch scope
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -44,7 +43,7 @@ router.post('/users/bank-admins', requireAuth, requireAdmin, userController.crea
  *       200: { description: Bank members returned }
  *       403: { description: Bank administrator access is required }
  *   post:
- *     summary: Register a member with the authenticated Bank Admin's assigned sub-branch
+ *     summary: Register a member in a sub-branch managed by the caller
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -59,26 +58,27 @@ router.post('/users/bank-admins', requireAuth, requireAdmin, userController.crea
  *               name: { type: string }
  *               email: { type: string, format: email }
  *               password: { type: string, minLength: 8 }
+ *               branchId: { type: string, description: Required for Bank Admins; ignored for Sub-branch Managers }
  *     responses:
  *       202: { description: Member created and verification code sent; manager approval is still required after OTP verification }
  *       400: { description: Invalid registration details }
- *       403: { description: Bank Admin must be assigned to a bank sub-branch }
+ *       403: { description: Bank Admin or Sub-branch Manager access is required }
  */
-router.get('/users/members', requireAuth, requireStaffRole('branch_manager', 'general_manager', 'hr_manager', 'finance_manager'), userController.listBankMembers);
-router.post('/users/members', requireAuth, requireStaffRole('branch_manager'), userController.createBankMember);
+router.get('/users/members', requireAuth, requireStaffRole('bank_admin', 'branch_manager', 'general_manager', 'hr_manager', 'finance_manager'), userController.listBankMembers);
+router.post('/users/members', requireAuth, requireStaffRole('bank_admin', 'branch_manager'), userController.createBankMember);
 /**
  * @swagger
  * /api/users/staff:
  *   get:
- *     summary: List employees across the authenticated employee's assigned bank
+ *     summary: List staff within the authenticated employee's bank or sub-branch scope
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200: { description: Bank staff returned }
- *       403: { description: Bank employee must have a sub-branch assignment }
+ *       403: { description: Employee must have a valid bank assignment }
  *   post:
- *     summary: Create a bank employee in the authenticated Branch Manager's sub-branch
+ *     summary: Create a bank employee in a sub-branch assigned to the authenticated Bank Admin
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -88,19 +88,20 @@ router.post('/users/members', requireAuth, requireStaffRole('branch_manager'), u
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name, email, password, staffRole]
+ *             required: [name, email, password, staffRole, branchId]
  *             properties:
  *               name: { type: string }
  *               email: { type: string, format: email }
  *               password: { type: string, minLength: 8 }
- *               staffRole: { type: string, enum: [general_manager, hr_manager, finance_manager, accounts_manager] }
+ *               staffRole: { type: string, enum: [branch_manager, general_manager, hr_manager, finance_manager, accounts_manager] }
+ *               branchId: { type: string }
  *     responses:
  *       202: { description: Bank employee created and verification code sent }
  *       400: { description: Invalid registration details or staff role }
- *       403: { description: Branch Manager access is required }
+ *       403: { description: Bank Admin access is required }
  */
-router.get('/users/staff', requireAuth, requireStaffRole('branch_manager', 'general_manager', 'hr_manager', 'finance_manager'), userController.listBankStaff);
-router.post('/users/staff', requireAuth, requireStaffRole('branch_manager'), userController.createBankStaff);
+router.get('/users/staff', requireAuth, requireStaffRole('bank_admin', 'branch_manager', 'general_manager', 'hr_manager', 'finance_manager'), userController.listBankStaff);
+router.post('/users/staff', requireAuth, requireStaffRole('bank_admin'), userController.createBankStaff);
 
 /**
  * @swagger
@@ -122,7 +123,7 @@ router.post('/users/staff', requireAuth, requireStaffRole('branch_manager'), use
  *       403: { description: Branch Manager access is required }
  *       404: { description: Employee not found in the administrator's bank }
  */
-router.patch('/users/staff/:staffId/activate', requireAuth, requireStaffRole('branch_manager'), userController.activateBankStaff);
+router.patch('/users/staff/:staffId/activate', requireAuth, requireStaffRole('bank_admin'), userController.activateBankStaff);
 
 /**
  * @swagger
@@ -143,7 +144,7 @@ router.patch('/users/staff/:staffId/activate', requireAuth, requireStaffRole('br
  *       403: { description: Branch Manager access is required }
  *       404: { description: Employee not found in the administrator's bank }
  */
-router.patch('/users/staff/:staffId/deactivate', requireAuth, requireStaffRole('branch_manager'), userController.deactivateBankStaff);
+router.patch('/users/staff/:staffId/deactivate', requireAuth, requireStaffRole('bank_admin'), userController.deactivateBankStaff);
 
 /**
  * @swagger
@@ -165,7 +166,7 @@ router.patch('/users/staff/:staffId/deactivate', requireAuth, requireStaffRole('
  *       403: { description: Bank administrator access is required }
  *       404: { description: Bank member not found in the administrator's bank }
  */
-router.patch('/users/members/:memberId/activate', requireAuth, requireStaffRole('branch_manager'), userController.activateBankMember);
+router.patch('/users/members/:memberId/activate', requireAuth, requireStaffRole('bank_admin', 'branch_manager'), userController.activateBankMember);
 
 /**
  * @swagger
@@ -186,7 +187,7 @@ router.patch('/users/members/:memberId/activate', requireAuth, requireStaffRole(
  *       403: { description: Branch Manager access is required }
  *       404: { description: Bank member not found in the administrator's bank }
  */
-router.patch('/users/members/:memberId/deactivate', requireAuth, requireStaffRole('branch_manager'), userController.deactivateBankMember);
+router.patch('/users/members/:memberId/deactivate', requireAuth, requireStaffRole('bank_admin', 'branch_manager'), userController.deactivateBankMember);
 
 /**
  * @swagger

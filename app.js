@@ -7,6 +7,7 @@ const userRoutes = require('./route/userRoute');
 const bankRoutes = require('./route/bankRoute');
 const payrollRoutes = require('./route/payrollRoute');
 const loanRoutes = require('./route/loanRoute');
+const guestFeedbackRoutes = require('./route/guestFeedbackRoute');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,6 +37,7 @@ app.use('/api', userRoutes);
 app.use('/api', bankRoutes);
 app.use('/api', payrollRoutes);
 app.use('/api', loanRoutes);
+app.use('/api', guestFeedbackRoutes);
 app.get('/api-docs.json', (req, res) => {
     res.json(swaggerSpec);
 });

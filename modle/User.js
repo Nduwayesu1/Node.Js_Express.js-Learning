@@ -44,7 +44,7 @@ const userSchema = new Schema(
       },
       staffRole: {
         type: String,
-        enum: ['branch_manager', 'general_manager', 'hr_manager', 'finance_manager', 'accounts_manager']
+        enum: ['bank_admin', 'branch_manager', 'general_manager', 'hr_manager', 'finance_manager', 'accounts_manager']
       },
       bankId: {
         type: Schema.Types.ObjectId,

@@ -83,17 +83,16 @@ async function createPendingUser({ name, email, password, bankId, branchId, role
 async function createBankAdmin(req, res) {
     const input = readRegistrationInput(req.body);
     if (input.error) return res.status(400).json({ message: input.error });
-    const { bankId, branchId } = req.body;
-    if (!mongoose.Types.ObjectId.isValid(bankId) || !mongoose.Types.ObjectId.isValid(branchId)) {
-        return res.status(400).json({ message: 'Select a valid bank and sub-branch' });
+    const { bankId } = req.body;
+    if (!mongoose.Types.ObjectId.isValid(bankId)) {
+        return res.status(400).json({ message: 'Select a valid bank' });
     }
 
     const result = await createPendingUser({
         ...input,
         bankId,
-        branchId,
         role: 'employee',
-        staffRole: 'branch_manager',
+        staffRole: 'bank_admin',
         accountLabel: 'Bank Admin'
     });
     return res.status(result.status).json({ message: result.message });
@@ -106,14 +105,18 @@ async function createBankStaff(req, res) {
     if (input.error) return res.status(400).json({ message: input.error });
 
     const staffRole = req.body.staffRole;
-    if (!['general_manager', 'hr_manager', 'finance_manager', 'accounts_manager'].includes(staffRole)) {
+    if (!['branch_manager', 'general_manager', 'hr_manager', 'finance_manager', 'accounts_manager'].includes(staffRole)) {
         return res.status(400).json({ message: 'Select a valid bank staff role' });
+    }
+    const { branchId } = req.body;
+    if (!mongoose.Types.ObjectId.isValid(branchId)) {
+        return res.status(400).json({ message: 'Select a valid sub-branch' });
     }
 
     const result = await createPendingUser({
         ...input,
         bankId: bankAdmin.bankId,
-        branchId: bankAdmin.branchId,
+        branchId,
         role: 'employee',
         staffRole,
         accountLabel: 'Bank staff account'
@@ -124,12 +127,14 @@ async function createBankStaff(req, res) {
 async function listBankStaff(req, res) {
     const bankAdmin = await getAssignedBankAdmin(req, res);
     if (!bankAdmin) return;
+    const branchScoped = (bankAdmin.staffRole || 'branch_manager') === 'branch_manager';
 
     try {
         const [staff, bank] = await Promise.all([
             User.find({
                 role: 'employee',
-                bankId: bankAdmin.bankId
+                bankId: bankAdmin.bankId,
+                ...(branchScoped ? { branchId: bankAdmin.branchId } : {})
             }).select('name email staffRole bankId branchId isVerified isActive createdAt').sort({ staffRole: 1, name: 1 }).lean(),
             Bank.findById(bankAdmin.bankId).select('branches._id branches.branchName branches.branchCode').lean()
         ]);
@@ -148,8 +153,8 @@ async function listBankStaff(req, res) {
 async function setBankStaffActiveStatus(req, res, isActive) {
     const bankAdmin = await getAssignedBankAdmin(req, res);
     if (!bankAdmin) return;
-    if ((bankAdmin.staffRole || 'branch_manager') !== 'branch_manager') {
-        return res.status(403).json({ message: 'Only the Branch Manager can manage bank staff access' });
+    if (bankAdmin.staffRole !== 'bank_admin') {
+        return res.status(403).json({ message: 'Only the Bank Admin can manage bank staff access' });
     }
     if (!mongoose.Types.ObjectId.isValid(req.params.staffId)) {
         return res.status(400).json({ message: 'A valid bank employee is required' });
@@ -201,8 +206,8 @@ async function getAssignedBankAdmin(req, res) {
         if (!bankAdmin || bankAdmin.role !== 'employee') {
             return res.status(403).json({ message: 'Bank staff access is required' });
         }
-        if (!bankAdmin.bankId || !bankAdmin.branchId) {
-            return res.status(403).json({ message: 'Your account is not assigned to a bank sub-branch' });
+        if (!bankAdmin.bankId || (bankAdmin.staffRole !== 'bank_admin' && !bankAdmin.branchId)) {
+            return res.status(403).json({ message: 'Your account is not assigned to the required bank scope' });
         }
         return bankAdmin;
     } catch (error) {
@@ -215,13 +220,16 @@ async function getAssignedBankAdmin(req, res) {
 async function listBankMembers(req, res) {
     const bankAdmin = await getAssignedBankAdmin(req, res);
     if (!bankAdmin) return;
+    const branchScoped = (bankAdmin.staffRole || 'branch_manager') === 'branch_manager';
 
     try {
-        const [members, bank] = await Promise.all([
-            User.find({
+        const memberFilter = {
                 role: 'user',
                 customerBankId: bankAdmin.bankId
-            })
+        };
+        if (branchScoped) memberFilter.branchId = bankAdmin.branchId;
+        const [members, bank] = await Promise.all([
+            User.find(memberFilter)
                 .select('name email isVerified isApproved isActive branchId createdAt')
                 .sort({ createdAt: -1 })
                 .lean(),
@@ -245,10 +253,14 @@ async function createBankMember(req, res) {
     const input = readRegistrationInput(req.body);
     if (input.error) return res.status(400).json({ message: input.error });
 
+    const branchId = bankAdmin.staffRole === 'bank_admin' ? req.body.branchId : bankAdmin.branchId;
+    if (!mongoose.Types.ObjectId.isValid(branchId)) {
+        return res.status(400).json({ message: 'Select a valid sub-branch' });
+    }
     const result = await createPendingUser({
         ...input,
         bankId: bankAdmin.bankId,
-        branchId: bankAdmin.branchId,
+        branchId,
         role: 'user',
         accountLabel: 'Member account'
     });
@@ -258,19 +270,22 @@ async function createBankMember(req, res) {
 async function activateBankMember(req, res) {
     const bankAdmin = await getAssignedBankAdmin(req, res);
     if (!bankAdmin) return;
-    if ((bankAdmin.staffRole || 'branch_manager') !== 'branch_manager') {
-        return res.status(403).json({ message: 'Only the Branch Manager can approve and activate bank members' });
+    const staffRole = bankAdmin.staffRole || 'branch_manager';
+    if (!['bank_admin', 'branch_manager'].includes(staffRole)) {
+        return res.status(403).json({ message: 'Bank Admin or Sub-branch Manager access is required' });
     }
     if (!mongoose.Types.ObjectId.isValid(req.params.memberId)) {
         return res.status(400).json({ message: 'A valid bank member is required' });
     }
 
     try {
-        const member = await User.findOne({
+        const memberFilter = {
             _id: req.params.memberId,
             role: 'user',
             customerBankId: bankAdmin.bankId
-        });
+        };
+        if (staffRole === 'branch_manager') memberFilter.branchId = bankAdmin.branchId;
+        const member = await User.findOne(memberFilter);
         if (!member) return res.status(404).json({ message: 'Bank member not found' });
         if (member.isApproved && member.isVerified && member.isActive !== false) {
             return res.status(200).json({ message: 'Bank member is already active', member });
@@ -292,19 +307,22 @@ async function activateBankMember(req, res) {
 async function deactivateBankMember(req, res) {
     const bankAdmin = await getAssignedBankAdmin(req, res);
     if (!bankAdmin) return;
-    if ((bankAdmin.staffRole || 'branch_manager') !== 'branch_manager') {
-        return res.status(403).json({ message: 'Only the Branch Manager can deactivate bank members' });
+    const staffRole = bankAdmin.staffRole || 'branch_manager';
+    if (!['bank_admin', 'branch_manager'].includes(staffRole)) {
+        return res.status(403).json({ message: 'Bank Admin or Sub-branch Manager access is required' });
     }
     if (!mongoose.Types.ObjectId.isValid(req.params.memberId)) {
         return res.status(400).json({ message: 'A valid bank member is required' });
     }
 
     try {
-        const member = await User.findOne({
+        const memberFilter = {
             _id: req.params.memberId,
             role: 'user',
             customerBankId: bankAdmin.bankId
-        });
+        };
+        if (staffRole === 'branch_manager') memberFilter.branchId = bankAdmin.branchId;
+        const member = await User.findOne(memberFilter);
         if (!member) return res.status(404).json({ message: 'Bank member not found' });
         if (member.isActive === false) {
             return res.status(200).json({ message: 'Bank member is already deactivated', member });
@@ -476,7 +494,7 @@ async function updateUser(req, res) {
         updates.role = role;
     }
     if (staffRole !== undefined) {
-        if (!['branch_manager', 'general_manager', 'hr_manager', 'finance_manager', 'accounts_manager'].includes(staffRole)) {
+        if (!['bank_admin', 'branch_manager', 'general_manager', 'hr_manager', 'finance_manager', 'accounts_manager'].includes(staffRole)) {
             return res.status(400).json({ message: 'Select a valid bank staff role' });
         }
         updates.staffRole = staffRole;
@@ -501,7 +519,7 @@ async function updateUser(req, res) {
     }
 
     try {
-        const currentUser = await User.findById(req.params.id).select('bankId branchId role');
+        const currentUser = await User.findById(req.params.id).select('bankId branchId role staffRole');
         if (!currentUser) return res.status(404).json({ message: 'User not found' });
         if (updates.role !== undefined && updates.role !== currentUser.role) {
             if (req.params.id === req.user.id) {
@@ -518,10 +536,10 @@ async function updateUser(req, res) {
             updates.branchId = null;
             updates.staffRole = null;
         } else if (updates.role === 'employee' && updates.staffRole === undefined && currentUser.role !== 'employee') {
-            updates.staffRole = 'branch_manager';
+            updates.staffRole = 'bank_admin';
         }
 
-        if (updates.bankId || updates.branchId) {
+        if (updates.bankId || updates.branchId || updates.staffRole !== undefined) {
             const selectedBankId = updates.bankId || currentUser.bankId;
             const selectedRole = updates.role || currentUser.role;
             if (selectedRole !== 'employee') return res.status(400).json({ message: 'Only employee accounts can be assigned to a bank' });
@@ -533,6 +551,10 @@ async function updateUser(req, res) {
                 : (updates.bankId ? null : currentUser.branchId);
             if (selectedBranchId && !bank.branches.id(selectedBranchId)) {
                 return res.status(400).json({ message: 'The selected branch does not belong to this bank' });
+            }
+            const selectedStaffRole = updates.staffRole || (currentUser.role === 'employee' ? currentUser.staffRole : undefined);
+            if (selectedStaffRole !== 'bank_admin' && !selectedBranchId) {
+                return res.status(400).json({ message: 'Select a sub-branch for this staff role' });
             }
             if (updates.staffRole && (updates.role || currentUser.role) !== 'employee') {
                 return res.status(400).json({ message: 'Only employee accounts can have a bank staff role' });

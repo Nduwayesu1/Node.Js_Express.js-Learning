@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowDownToLine, ArrowRight, AtSign, Bell, Building2, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Clock3, HandCoins, LayoutDashboard, LockKeyhole, LogOut, Menu, ShieldCheck, UserPlus, UserRound, UsersRound, Wallet, X } from 'lucide-react';
-import { activateBankMember, activateBankStaff, activateUser, addBankBranch, createBank, createBankAccount, createBankAdmin, createBankMember, createBankStaff, createLoan, createPayrollBatch, deactivateBankMember, deactivateBankStaff, decideLoan, deleteUser, depositToBankAccount, getAssignedBank, getAvailableBanks, getBankAccountTransactions, getBankAccounts, getBankMembers, getBankStaff, getBanks, getFinanceBanks, getLoans, getMyBankAccounts, getPayrollBatches, getPayrollEmployees, getProfile, getRwandaCells, getRwandaDistricts, getRwandaProvinces, getRwandaSectors, getRwandaVillages, getUsers, login, markLoanDefaulted, recordLoanRepayment, resendOtp, searchTransferRecipients, transferBetweenAccounts, updateBankAccountStatus, updateProfile, updateUser, verifyOtp } from './api';
+import { ArrowDownToLine, ArrowRight, AtSign, Bell, Building2, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Clock3, HandCoins, LayoutDashboard, LockKeyhole, LogOut, Menu, MessageSquareText, ShieldCheck, UserPlus, UserRound, UsersRound, Wallet, X } from 'lucide-react';
+import { activateBankMember, activateBankStaff, activateUser, addBankBranch, createBank, createBankAccount, createBankAdmin, createBankMember, createBankStaff, createLoan, createPayrollBatch, deactivateBankMember, deactivateBankStaff, decideLoan, deleteUser, depositToBankAccount, getAssignedBank, getAvailableBanks, getBankAccountTransactions, getBankAccounts, getBankMembers, getBankStaff, getBanks, getFinanceBanks, getGuestFeedback, getLoans, getMyBankAccounts, getPayrollBatches, getPayrollEmployees, getProfile, getRwandaCells, getRwandaDistricts, getRwandaProvinces, getRwandaSectors, getRwandaVillages, getUsers, login, markGuestFeedbackReviewed, markLoanDefaulted, payLoanWithVirtualSimulator, recordLoanRepayment, resendOtp, searchTransferRecipients, submitGuestFeedback, transferBetweenAccounts, updateBankAccountStatus, updateProfile, updateUser, verifyOtp } from './api';
 import './styles.css';
 
 const initialForm = { email: '', password: '' };
 const BANKS_PER_PAGE = 8;
 const ACTIVITY_STORAGE_KEY = 'loarn_system_activity';
 const BANK_STAFF_ROLES = [
+  { value: 'branch_manager', label: 'Sub-branch Manager' },
   { value: 'general_manager', label: 'General Manager / CEO' },
   { value: 'hr_manager', label: 'HR Manager' },
   { value: 'finance_manager', label: 'Finance Manager' },
@@ -27,8 +28,9 @@ function loadActivityItems() {
 function defaultDashboardSection(profile) {
   if (profile.role !== 'employee') return 'overview';
   switch (profile.staffRole || 'branch_manager') {
+    case 'bank_admin': return 'overview';
     case 'general_manager': return 'overview';
-    case 'hr_manager': return 'directory';
+    case 'hr_manager': return 'hr-dashboard';
     case 'finance_manager': return 'payroll';
     case 'accounts_manager': return 'ledger';
     default: return 'members';
@@ -118,7 +120,7 @@ function App() {
   useEffect(() => {
     if (!token || !profile) return;
     const canViewLoans = profile.role !== 'employee'
-      || ['branch_manager', 'general_manager'].includes(profile.staffRole || 'branch_manager');
+      || ['bank_admin', 'branch_manager', 'general_manager'].includes(profile.staffRole || 'branch_manager');
     if (!canViewLoans) {
       setLoanApplications([]);
       return;
@@ -272,6 +274,19 @@ function App() {
     }
   }
 
+  async function handleVirtualLoanPayment(loanId, payment) {
+    try {
+      const result = await payLoanWithVirtualSimulator(token, loanId, payment);
+      await refreshLoans();
+      setNotice({ type: 'success', text: `${result.payment.receiptNumber} was issued. This is a virtual simulation only; no real funds moved.` });
+      recordActivity('A virtual loan repayment was simulated.');
+      return result.payment;
+    } catch (error) {
+      showError(error);
+      return null;
+    }
+  }
+
   async function handleLoanDefault(loanId) {
     try {
       await markLoanDefaulted(token, loanId);
@@ -300,7 +315,11 @@ function App() {
   }
 
   if (token && profile) {
-    return <Dashboard profile={profile} users={users} banks={banks} token={token} pagination={pagination} userQuery={userQuery} setUserQuery={setUserQuery} onActivateUser={handleActivateUser} onRoleUpdate={handleRoleUpdate} onUserCreated={handleUserCreated} onBankCreated={handleBankCreated} onRefreshBanks={handleAvailableBanksRefresh} section={section} setSection={setSection} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} form={form} loading={loading} notice={notice} setNotice={setNotice} activityItems={activityItems} setActivityItems={setActivityItems} onActivity={recordActivity} setForm={setForm} onSave={handleProfileSave} onLogout={handleLogout} loanApplications={loanApplications} systemAnnualInterestRate={systemAnnualInterestRate} onLoanApplication={handleLoanApplication} onLoanDecision={handleLoanDecision} onLoanRepayment={handleLoanRepayment} onLoanDefault={handleLoanDefault} />;
+    return <Dashboard profile={profile} users={users} banks={banks} token={token} pagination={pagination} userQuery={userQuery} setUserQuery={setUserQuery} onActivateUser={handleActivateUser} onRoleUpdate={handleRoleUpdate} onUserCreated={handleUserCreated} onBankCreated={handleBankCreated} onRefreshBanks={handleAvailableBanksRefresh} section={section} setSection={setSection} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} form={form} loading={loading} notice={notice} setNotice={setNotice} activityItems={activityItems} setActivityItems={setActivityItems} onActivity={recordActivity} setForm={setForm} onSave={handleProfileSave} onLogout={handleLogout} loanApplications={loanApplications} systemAnnualInterestRate={systemAnnualInterestRate} onLoanApplication={handleLoanApplication} onLoanDecision={handleLoanDecision} onLoanRepayment={handleLoanRepayment} onVirtualLoanPayment={handleVirtualLoanPayment} onLoanDefault={handleLoanDefault} />;
+  }
+
+  if (view === 'guest') {
+    return <GuestDashboard onBack={() => { setView('login'); setNotice({ type: '', text: '' }); }} />;
   }
 
   return (
@@ -318,14 +337,14 @@ function App() {
         <section className="auth-card">
           {view === 'otp'
             ? <OtpForm otp={otp} setOtp={setOtp} email={form.email} loading={loading} notice={notice} onSubmit={handleVerify} onResend={async () => { setLoading(true); try { await resendOtp(form.email); setNotice({ type: 'success', text: 'A new verification code has been sent.' }); } catch (error) { showError(error); } finally { setLoading(false); } }} onBack={() => setView('login')} />
-            : <AuthForm form={form} loading={loading} notice={notice} onChange={updateField} onSubmit={handleSubmit} onVerify={() => setView('otp')} />}
+            : <AuthForm form={form} loading={loading} notice={notice} onChange={updateField} onSubmit={handleSubmit} onVerify={() => setView('otp')} onGuest={() => { setNotice({ type: '', text: '' }); setView('guest'); }} />}
         </section>
       </section>
     </main>
   );
 }
 
-function AuthForm({ form, loading, notice, onChange, onSubmit, onVerify }) {
+function AuthForm({ form, loading, notice, onChange, onSubmit, onVerify, onGuest }) {
   return <>
     <div className="card-heading"><span className="eyebrow">ACCOUNT PORTAL</span><h2>Welcome back</h2><p>Sign in to continue your journey.</p></div>
     <form onSubmit={onSubmit} className="form-stack">
@@ -336,6 +355,7 @@ function AuthForm({ form, loading, notice, onChange, onSubmit, onVerify }) {
     </form>
     <div className="card-footer">Need a member account? Contact your Bank Admin.</div>
     <button className="quiet-button" onClick={onVerify}>I already have an OTP</button>
+    <button className="quiet-button" type="button" onClick={onGuest}>Continue as Guest · View demo & send feedback</button>
   </>;
 }
 
@@ -346,6 +366,58 @@ function OtpForm({ otp, setOtp, email, loading, notice, onSubmit, onResend, onBa
   </>;
 }
 
+function GuestDashboard({ onBack }) {
+  const [form, setForm] = useState({ category: 'general', rating: '5', message: '' });
+  const [notice, setNotice] = useState({ type: '', text: '' });
+  const [submitting, setSubmitting] = useState(false);
+  const months = recentMonths().map((month, index) => ({ label: month.label, value: [24, 31, 28, 36, 42, 48][index] }));
+  const loanTypes = [
+    { label: 'Personal', value: 42 },
+    { label: 'Salary', value: 57 },
+    { label: 'Business', value: 34 },
+    { label: 'Home', value: 19 },
+    { label: 'Education', value: 14 }
+  ];
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setSubmitting(true);
+    setNotice({ type: '', text: '' });
+    try {
+      await submitGuestFeedback({ ...form, rating: Number(form.rating) });
+      setForm({ category: 'general', rating: '5', message: '' });
+      setNotice({ type: 'success', text: 'Thank you. Your feedback was submitted anonymously.' });
+    } catch (error) {
+      setNotice({ type: 'error', text: error.message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return <main className="guest-dashboard-shell">
+    <header className="guest-dashboard-header"><div><div className="brand-mark"><img className="brand-logo" src="/e-banking-payment.svg" alt="" /><span>LOAN</span></div><div><span className="eyebrow">PUBLIC DEMO · SAMPLE DATA</span><h1>Bank Loan Management</h1><p>This preview uses fictional data only. It does not show real customer or bank records.</p></div></div><button className="quiet-button" type="button" onClick={onBack}>Back to sign in</button></header>
+    <section className="guest-dashboard-content">
+      <ReportCards items={[
+        { label: 'Sample loan requests', value: '1,248', detail: 'Fictional demo metric' },
+        { label: 'Sample disbursements', value: 'RWF 840M', detail: 'Fictional demo metric' },
+        { label: 'Sample active borrowers', value: '892', detail: 'Fictional demo metric' },
+        { label: 'Sample approval rate', value: '68%', detail: 'Fictional demo metric' }
+      ]} />
+      <div className="financial-chart-grid">
+        <ReportLineChart title="Demo loan applications" subtitle="Illustrative monthly trend · sample figures" values={months} />
+        <ReportBarChart title="Demo applications by loan category" subtitle="Illustrative counts · sample figures" values={loanTypes} />
+      </div>
+      <section className="panel guest-feedback-panel"><PanelHeading eyebrow="HELP US IMPROVE" title="Share feedback" icon={<MessageSquareText size={22} />} /><p>Your feedback is stored without your name or email. Please do not include sensitive account or identity details.</p><form className="bank-form" onSubmit={handleSubmit}>
+        <label htmlFor="guest-feedback-category">What is your feedback about?</label><select className="bank-text-input" id="guest-feedback-category" value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}><option value="general">General</option><option value="dashboard">Dashboard</option><option value="loan-process">Loan process</option><option value="payments">Payments</option><option value="accessibility">Accessibility</option></select>
+        <label htmlFor="guest-feedback-rating">Rating</label><select className="bank-text-input" id="guest-feedback-rating" value={form.rating} onChange={(event) => setForm({ ...form, rating: event.target.value })}><option value="5">5 — Excellent</option><option value="4">4 — Good</option><option value="3">3 — Fair</option><option value="2">2 — Needs improvement</option><option value="1">1 — Poor</option></select>
+        <label htmlFor="guest-feedback-message">Your feedback</label><textarea className="bank-text-input guest-feedback-message" id="guest-feedback-message" minLength={10} maxLength={2000} value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })} placeholder="Tell us what worked or what should improve…" required />
+        {notice.text && <Notice notice={notice} />}
+        <button className="bank-button" type="submit" disabled={submitting}>{submitting ? 'Sending feedback…' : 'Submit feedback'}</button>
+      </form><small>Feedback is limited to five submissions per network address every 15 minutes.</small></section>
+    </section>
+  </main>;
+}
+
 function Field({ icon, ...props }) { return <label className="field"><span>{icon}</span><input {...props} required /></label>; }
 function Notice({ notice }) {
   return <div className={`notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'} aria-live={notice.type === 'error' ? 'assertive' : 'polite'}>
@@ -353,12 +425,12 @@ function Notice({ notice }) {
   </div>;
 }
 
-function Dashboard({ profile, users, banks, token, pagination, userQuery, setUserQuery, onActivateUser, onRoleUpdate, onUserCreated, onBankCreated, onRefreshBanks, section, setSection, sidebarOpen, setSidebarOpen, form, loading, notice, setNotice, activityItems, setActivityItems, onActivity, setForm, onSave, onLogout, loanApplications, systemAnnualInterestRate, onLoanApplication, onLoanDecision, onLoanRepayment, onLoanDefault }) {
+function Dashboard({ profile, users, banks, token, pagination, userQuery, setUserQuery, onActivateUser, onRoleUpdate, onUserCreated, onBankCreated, onRefreshBanks, section, setSection, sidebarOpen, setSidebarOpen, form, loading, notice, setNotice, activityItems, setActivityItems, onActivity, setForm, onSave, onLogout, loanApplications, systemAnnualInterestRate, onLoanApplication, onLoanDecision, onLoanRepayment, onVirtualLoanPayment, onLoanDefault }) {
   const firstName = profile.name?.split(' ')[0] || 'there';
   const manager = profile.role === 'employee';
   const staffRole = profile.staffRole || 'branch_manager';
   const staffRoleLabel = BANK_STAFF_ROLES.find((role) => role.value === staffRole)?.label
-    || (staffRole === 'branch_manager' ? 'Branch Manager / Bank Admin' : profile.role);
+    || (staffRole === 'bank_admin' ? 'Bank Admin' : staffRole === 'branch_manager' ? 'Sub-branch Manager' : profile.role);
   useEffect(() => {
     if (profile.role === 'user' && section !== 'overview' && section !== 'profile') {
       document.getElementById(`customer-${section}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -369,20 +441,23 @@ function Dashboard({ profile, users, banks, token, pagination, userQuery, setUse
     <Sidebar profile={profile} staffRole={staffRole} section={section} setSection={setSection} open={sidebarOpen} setOpen={setSidebarOpen} onLogout={onLogout} /><div className="dashboard-main"><header className="topbar"><button className="mobile-menu" onClick={() => setSidebarOpen(true)} title="Open navigation"><Menu size={20} /></button><div className="topbar-actions"><div className="topbar-user"><span>{profile.email}</span><button className="icon-button" title="Sign out" onClick={onLogout}><LogOut size={18} /></button></div><NotificationCenter items={activityItems} setItems={setActivityItems} /></div></header>{notice.type === 'error' && notice.text && <div className="system-error" role="alert">{notice.text}</div>}
     <section className={`dashboard-content ${bankView ? 'bank-dashboard' : ''}`}><div className="welcome-row"><div><span className="eyebrow">{manager ? staffRoleLabel.toUpperCase() : profile.role.toUpperCase()} WORKSPACE</span><h1>Welcome, <em>{firstName}</em> <span className="wave">✦</span></h1></div><div className="role-pill"><ShieldCheck size={15} /> {manager ? staffRoleLabel : profile.role}</div></div>
       {profile.role === 'admin' && ['overview', 'users'].includes(section) && <AdminCreateBankAdmin banks={banks} onCreated={onUserCreated} onActivity={onActivity} />}
-      {profile.role === 'admin' && !['deposits', 'applications', 'banks'].includes(section) && <AdminDashboard users={users} pagination={pagination} query={userQuery} setQuery={setUserQuery} onActivateUser={onActivateUser} onRoleUpdate={onRoleUpdate} onUserCreated={onUserCreated} section={section} />}
+      {profile.role === 'admin' && !['deposits', 'applications', 'banks', 'feedback'].includes(section) && <AdminDashboard users={users} pagination={pagination} query={userQuery} setQuery={setUserQuery} onActivateUser={onActivateUser} onRoleUpdate={onRoleUpdate} onUserCreated={onUserCreated} section={section} />}
       {profile.role === 'admin' && section === 'users' && <AdminEmployeeAccess users={users} banks={banks} currentUserId={profile._id} onRoleUpdate={onRoleUpdate} />}
       {profile.role === 'admin' && section === 'deposits' && <AdminDepositDashboard token={token} banks={banks} onActivity={onActivity} />}
       {profile.role === 'admin' && section === 'applications' && <ManagerDashboard applications={loanApplications} systemAnnualInterestRate={systemAnnualInterestRate} section={section} notice={notice} onDecision={onLoanDecision} onRepayment={onLoanRepayment} onDefault={onLoanDefault} />}
       {profile.role === 'admin' && section === 'banks' && <AdminBankDashboard banks={banks} loanApplications={loanApplications} token={token} onCreated={onBankCreated} onActivity={onActivity} />}
-      {manager && staffRole === 'branch_manager' && section === 'members' && <BankMembersDashboard token={token} onActivity={onActivity} />}
-      {manager && staffRole === 'branch_manager' && section === 'staff' && <BankStaffAdminDashboard token={token} onActivity={onActivity} />}
-      {manager && ['hr_manager', 'finance_manager'].includes(staffRole) && section === 'directory' && <BankStaffDirectoryDashboard token={token} />}
+      {profile.role === 'admin' && section === 'feedback' && <GuestFeedbackDashboard token={token} />}
+      {manager && ['bank_admin', 'branch_manager'].includes(staffRole) && section === 'members' && <BankMembersDashboard token={token} banks={banks} staffRole={staffRole} onActivity={onActivity} />}
+      {manager && staffRole === 'bank_admin' && section === 'staff' && <BankStaffAdminDashboard token={token} banks={banks} onActivity={onActivity} />}
+      {manager && staffRole === 'bank_admin' && section === 'overview' && <BankAdminReportDashboard banks={banks} token={token} loanApplications={loanApplications} />}
+      {manager && staffRole === 'hr_manager' && section === 'hr-dashboard' && <HRDashboard token={token} />}
+      {manager && staffRole === 'finance_manager' && section === 'directory' && <BankStaffDirectoryDashboard token={token} />}
       {manager && staffRole === 'general_manager' && section === 'overview' && <GeneralManagerDashboard banks={banks} token={token} loanApplications={loanApplications} />}
       {manager && staffRole === 'finance_manager' && section === 'payroll' && <FinancePayrollDashboard banks={banks} token={token} onActivity={onActivity} />}
-      {manager && ['branch_manager', 'accounts_manager'].includes(staffRole) && section === 'ledger' && <BankStaffDashboard banks={banks} token={token} profile={profile} canManageAccounts={staffRole === 'accounts_manager'} onActivity={onActivity} />}
-      {manager && staffRole === 'branch_manager' && section === 'applications' && <ManagerDashboard applications={loanApplications} systemAnnualInterestRate={systemAnnualInterestRate} section={section} notice={notice} onDecision={onLoanDecision} onRepayment={onLoanRepayment} onDefault={onLoanDefault} />}
+      {manager && ['bank_admin', 'branch_manager', 'accounts_manager'].includes(staffRole) && section === 'ledger' && <BankStaffDashboard banks={banks} token={token} profile={profile} canManageAccounts={staffRole === 'accounts_manager'} onActivity={onActivity} />}
+      {manager && ['bank_admin', 'branch_manager'].includes(staffRole) && section === 'applications' && <ManagerDashboard applications={loanApplications} systemAnnualInterestRate={systemAnnualInterestRate} section={section} notice={notice} onDecision={onLoanDecision} onRepayment={onLoanRepayment} onDefault={onLoanDefault} />}
       {manager && staffRole === 'general_manager' && section === 'applications' && <ManagerDashboard applications={loanApplications} systemAnnualInterestRate={systemAnnualInterestRate} section={section} notice={{ type: '', text: '' }} readOnly onDecision={onLoanDecision} onRepayment={onLoanRepayment} onDefault={onLoanDefault} />}
-        {profile.role === 'user' && section !== 'profile' && <UserDashboard profile={profile} banks={banks} token={token} systemAnnualInterestRate={systemAnnualInterestRate} onRefreshBanks={onRefreshBanks} applications={loanApplications.filter((application) => application.applicant === profile._id || application.applicant?._id === profile._id)} notice={notice} setNotice={setNotice} onLoanApplication={onLoanApplication} onActivity={onActivity} />}
+        {profile.role === 'user' && section !== 'profile' && <UserDashboard profile={profile} banks={banks} token={token} systemAnnualInterestRate={systemAnnualInterestRate} onRefreshBanks={onRefreshBanks} applications={loanApplications.filter((application) => application.applicant === profile._id || application.applicant?._id === profile._id)} notice={notice} setNotice={setNotice} onLoanApplication={onLoanApplication} onVirtualLoanPayment={onVirtualLoanPayment} onActivity={onActivity} />}
       {section === 'profile' && <ProfileDashboard profile={profile} form={form} loading={loading} notice={notice} setForm={setForm} onSave={onSave} />}
     </section></div>
   </main>;
@@ -411,18 +486,16 @@ function NotificationCenter({ items, setItems }) {
 }
 
 function AdminCreateBankAdmin({ banks, onCreated, onActivity }) {
-  const [form, setForm] = useState({ name: '', email: '', password: '', bankId: '', branchId: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', bankId: '' });
   const [notice, setNotice] = useState({ type: '', text: '' });
   const [submitting, setSubmitting] = useState(false);
-  const selectedBank = banks.find((bank) => bank._id === form.bankId);
-
   async function handleSubmit(event) {
     event.preventDefault();
     setSubmitting(true);
     setNotice({ type: '', text: '' });
     try {
       await createBankAdmin(localStorage.getItem('loarn_token'), form);
-      setForm({ name: '', email: '', password: '', bankId: '', branchId: '' });
+      setForm({ name: '', email: '', password: '', bankId: '' });
       setNotice({ type: 'success', text: 'Bank Admin account created. A verification code was sent to the user.' });
       onActivity('A Bank Admin account was registered.');
       onCreated();
@@ -433,12 +506,12 @@ function AdminCreateBankAdmin({ banks, onCreated, onActivity }) {
     }
   }
 
-  return <section className="panel create-user-panel"><PanelHeading eyebrow="ADMIN DIRECTORY" title="Register Bank Admin" icon={<UserPlus size={22} />} /><form className="create-user-form" onSubmit={handleSubmit}><label className="create-user-field">Full name<input autoComplete="name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label><label className="create-user-field">Email address<input type="email" autoComplete="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label><label className="create-user-field">Temporary password<input type="password" autoComplete="new-password" minLength={8} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required /></label><label className="create-user-field">Bank<select value={form.bankId} onChange={(event) => setForm({ ...form, bankId: event.target.value, branchId: '' })} required><option value="">Select a bank</option>{banks.map((bank) => <option key={bank._id} value={bank._id}>{bank.bankName}{bank.accountNumber ? ` · ${bank.accountNumber}` : ''}</option>)}</select></label><label className="create-user-field">Sub-branch<select value={form.branchId} onChange={(event) => setForm({ ...form, branchId: event.target.value })} required disabled={!selectedBank?.branches.length}><option value="">Select a sub-branch</option>{selectedBank?.branches.map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName}{branch.branchCode ? ` · ${branch.branchCode}` : ''}</option>)}</select></label><button className="create-user-submit" type="submit" disabled={submitting || !banks.length || !form.branchId}><UserPlus size={16} /> {submitting ? 'Registering...' : 'Register Bank Admin'}</button></form>{notice.text && <div className="create-user-notice"><Notice notice={notice} /></div>}<p className="create-user-help">The Bank Admin must verify their email before signing in. Their access is limited to the selected bank sub-branch.</p></section>;
+  return <section className="panel create-user-panel"><PanelHeading eyebrow="ADMIN DIRECTORY" title="Register Bank Admin" icon={<UserPlus size={22} />} /><form className="create-user-form" onSubmit={handleSubmit}><label className="create-user-field">Full name<input autoComplete="name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label><label className="create-user-field">Email address<input type="email" autoComplete="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label><label className="create-user-field">Temporary password<input type="password" autoComplete="new-password" minLength={8} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required /></label><label className="create-user-field">Bank<select value={form.bankId} onChange={(event) => setForm({ ...form, bankId: event.target.value })} required><option value="">Select a bank</option>{banks.map((bank) => <option key={bank._id} value={bank._id}>{bank.bankName}{bank.accountNumber ? ` · ${bank.accountNumber}` : ''}</option>)}</select></label><button className="create-user-submit" type="submit" disabled={submitting || !banks.length || !form.bankId}><UserPlus size={16} /> {submitting ? 'Registering...' : 'Register Bank Admin'}</button></form>{notice.text && <div className="create-user-notice"><Notice notice={notice} /></div>}<p className="create-user-help">Bank Admins are assigned to the entire bank. They create and assign Sub-branch Managers.</p></section>;
 }
 
 function AdminEmployeeAccess({ users, banks, currentUserId, onRoleUpdate }) {
   const eligibleUsers = users.filter((user) => user.isVerified);
-  return <section className="panel employee-access-panel"><PanelHeading eyebrow="STAFF ACCESS" title="User roles and bank assignments" icon={<UsersRound size={22} />} /><p>Assign employee job roles and scope each employee to a bank sub-branch. Bank Admins can also register staff for their own sub-branch.</p>{eligibleUsers.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>User</th><th>Role</th><th>Bank and sub-branch</th><th>Assignment</th></tr></thead><tbody>{eligibleUsers.map((user) => <EmployeeAccessRow key={user._id} user={user} banks={banks} currentUserId={currentUserId} onRoleUpdate={onRoleUpdate} />)}</tbody></table></div> : <p className="empty-state">No verified user accounts are available.</p>}</section>;
+  return <section className="panel employee-access-panel"><PanelHeading eyebrow="STAFF ACCESS" title="User roles and bank assignments" icon={<UsersRound size={22} />} /><p>Create or assign Bank Admins to a whole bank; Bank Admins create and assign Sub-branch Managers and other employees to individual branches.</p>{eligibleUsers.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>User</th><th>Role</th><th>Bank and sub-branch</th><th>Assignment</th></tr></thead><tbody>{eligibleUsers.map((user) => <EmployeeAccessRow key={user._id} user={user} banks={banks} currentUserId={currentUserId} onRoleUpdate={onRoleUpdate} />)}</tbody></table></div> : <p className="empty-state">No verified user accounts are available.</p>}</section>;
 }
 
 function EmployeeAccessRow({ user, banks, currentUserId, onRoleUpdate }) {
@@ -466,7 +539,7 @@ function EmployeeAccessRow({ user, banks, currentUserId, onRoleUpdate }) {
     const saved = await onRoleUpdate(user._id, updates);
     if (saved) {
       setRole(nextRole);
-      if (nextRole === 'employee') setStaffRole('branch_manager');
+      if (nextRole === 'employee') setStaffRole('bank_admin');
       if (nextRole === 'user') {
         setBankId('');
         setBranchId('');
@@ -482,12 +555,13 @@ function EmployeeAccessRow({ user, banks, currentUserId, onRoleUpdate }) {
     event.preventDefault();
     setSaving(true);
     setMessage('');
-    const saved = await onRoleUpdate(user._id, { role: 'employee', staffRole, bankId, branchId });
+    const assignmentBranchId = staffRole === 'bank_admin' ? null : branchId;
+    const saved = await onRoleUpdate(user._id, { role: 'employee', staffRole, bankId, branchId: assignmentBranchId });
     setMessage(saved ? 'Assignment saved' : 'Could not save');
     setSaving(false);
   }
 
-  return <tr><td><strong>{user.name}</strong><br /><small>{user.email}</small></td><td><select value={role} onChange={(event) => saveRole(event.target.value)} disabled={saving || user._id === currentUserId} aria-label={`Access role for ${user.name}`}><option value="user">Bank member</option><option value="employee">Bank employee</option><option value="admin">Administrator</option></select>{role === 'employee' && <select value={staffRole} onChange={(event) => setStaffRole(event.target.value)} disabled={saving} aria-label={`Staff role for ${user.name}`}><option value="branch_manager">Branch Manager / Bank Admin</option>{BANK_STAFF_ROLES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>}</td><td>{role === 'employee' ? <div className="employee-assignment-form"><select value={bankId} onChange={(event) => { setBankId(event.target.value); setBranchId(''); }} required disabled={saving}><option value="">Select bank</option>{banks.map((bank) => <option key={bank._id} value={bank._id}>{bank.bankName}</option>)}</select><select value={branchId} onChange={(event) => setBranchId(event.target.value)} required disabled={saving || !selectedBank?.branches.length}><option value="">Select sub-branch</option>{selectedBank?.branches.map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName}</option>)}</select></div> : 'Not assigned'}</td><td>{role === 'employee' ? <button className="manage-button" type="button" onClick={saveAssignment} disabled={saving || !bankId || !branchId}>{saving ? 'Saving...' : 'Assign'}</button> : role === 'admin' ? 'Administrator access' : 'Bank member access'}{message && <small className="employee-access-message">{message}</small>}</td></tr>;
+  return <tr><td><strong>{user.name}</strong><br /><small>{user.email}</small></td><td><select value={role} onChange={(event) => saveRole(event.target.value)} disabled={saving || user._id === currentUserId} aria-label={`Access role for ${user.name}`}><option value="user">Bank member</option><option value="employee">Bank employee</option><option value="admin">Administrator</option></select>{role === 'employee' && <select value={staffRole} onChange={(event) => { setStaffRole(event.target.value); if (event.target.value === 'bank_admin') setBranchId(''); }} disabled={saving} aria-label={`Staff role for ${user.name}`}><option value="bank_admin">Bank Admin</option>{BANK_STAFF_ROLES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>}</td><td>{role === 'employee' ? <div className="employee-assignment-form"><select value={bankId} onChange={(event) => { setBankId(event.target.value); setBranchId(''); }} required disabled={saving}><option value="">Select bank</option>{banks.map((bank) => <option key={bank._id} value={bank._id}>{bank.bankName}</option>)}</select>{staffRole !== 'bank_admin' && <select value={branchId} onChange={(event) => setBranchId(event.target.value)} required disabled={saving || !selectedBank?.branches.length}><option value="">Select sub-branch</option>{selectedBank?.branches.map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName}</option>)}</select>}{staffRole === 'bank_admin' && <span>All sub-branches</span>}</div> : 'Not assigned'}</td><td>{role === 'employee' ? <button className="manage-button" type="button" onClick={saveAssignment} disabled={saving || !bankId || (staffRole !== 'bank_admin' && !branchId)}>{saving ? 'Saving...' : 'Assign'}</button> : role === 'admin' ? 'Administrator access' : 'Bank member access'}{message && <small className="employee-access-message">{message}</small>}</td></tr>;
 }
 
 function Sidebar({ profile, staffRole, section, setSection, open, setOpen, onLogout }) {
@@ -501,10 +575,16 @@ function Sidebar({ profile, staffRole, section, setSection, open, setOpen, onLog
     { section: 'activity', label: 'Account activity', icon: Wallet },
     { section: 'applications', label: 'Loan requests', icon: Clock3 }
   );
+  if (profile.role === 'employee' && staffRole === 'bank_admin') navigation.push(
+    { section: 'overview', label: 'Bank report', icon: LayoutDashboard },
+    { section: 'members', label: 'Customer members', icon: UsersRound },
+    { section: 'staff', label: 'Staff and sub-branch managers', icon: UsersRound },
+    { section: 'ledger', label: 'Bank account ledger', icon: Building2 },
+    { section: 'applications', label: 'Loan applications', icon: HandCoins }
+  );
   if (profile.role === 'employee' && staffRole === 'branch_manager') navigation.push(
     { section: 'members', label: 'Bank members', icon: UsersRound },
-    { section: 'staff', label: 'Bank staff and roles', icon: UsersRound },
-    { section: 'ledger', label: 'Member account ledger', icon: Building2 },
+    { section: 'ledger', label: 'Sub-branch account ledger', icon: Building2 },
     { section: 'applications', label: 'Loan applications', icon: HandCoins }
   );
   if (profile.role === 'employee' && staffRole === 'general_manager') navigation.push(
@@ -512,7 +592,7 @@ function Sidebar({ profile, staffRole, section, setSection, open, setOpen, onLog
     { section: 'applications', label: 'Loan reports', icon: HandCoins }
   );
   if (profile.role === 'employee' && staffRole === 'hr_manager') navigation.push(
-    { section: 'directory', label: 'Staff and member directory', icon: UsersRound }
+    { section: 'hr-dashboard', label: 'HR dashboard', icon: UsersRound }
   );
   if (profile.role === 'employee' && staffRole === 'finance_manager') navigation.push(
     { section: 'directory', label: 'Bank-wide directory', icon: UsersRound },
@@ -527,7 +607,10 @@ function Sidebar({ profile, staffRole, section, setSection, open, setOpen, onLog
     { section: 'banks', label: 'Bank branches', icon: Building2 }
   );
   navigation.push({ section: 'profile', label: 'My profile', icon: UserRound });
-  if (profile.role === 'admin') navigation.push({ section: 'users', label: 'User directory', icon: UsersRound });
+  if (profile.role === 'admin') navigation.push(
+    { section: 'users', label: 'User directory', icon: UsersRound },
+    { section: 'feedback', label: 'Guest feedback', icon: MessageSquareText }
+  );
 
   return <aside className={`sidebar ${open ? 'open' : ''}`}><div className="sidebar-brand"><div className="brand-mark"><img className="brand-logo" src="/e-banking-payment.svg" alt="" /><span>LOAN</span></div><button className="icon-button close-sidebar" onClick={() => setOpen(false)} title="Close navigation"><X size={18} /></button></div><div className="sidebar-label">MENU</div>{navigation.map(({ section: target, label, icon: Icon }) => <button key={target} className={`nav-item ${section === target ? 'active' : ''}`} onClick={() => go(target)}><Icon size={17} /> {label}</button>)}<div className="sidebar-spacer" /><button className="nav-item logout-item" onClick={onLogout}><LogOut size={17} /> Sign out</button></aside>;
 }
@@ -718,10 +801,10 @@ function AdminBankDashboard({ banks, loanApplications, token, onCreated, onActiv
             <div className="bank-leadership-heading">Assigned bank staff <span className="bank-staff-count">{bankStaff.length}</span></div>
             {bankStaffLoading ? <p className="empty-state" role="status">Loading assigned staff...</p>
               : bankStaffError ? <p className="bank-staff-error" role="alert">{bankStaffError}</p>
-                : bankStaff.length ? <div className="user-table-wrap"><table className="user-table bank-staff-table"><thead><tr><th>Staff member</th><th>Sub-branch</th><th>Account status</th></tr></thead><tbody>{bankStaff.map((staff) => {
+                : bankStaff.length ? <div className="user-table-wrap"><table className="user-table bank-staff-table"><thead><tr><th>Staff member</th><th>Sub-branch</th><th>Account status</th></tr></thead><PaginatedRows rows={bankStaff} colSpan={3} renderRow={(staff) => {
                   const staffBranch = activeBank.branches.find((branch) => String(branch._id) === String(staff.branchId));
                   return <tr key={staff._id}><td><strong>{staff.name}</strong><br /><small>{staff.email}</small></td><td>{staffBranch?.branchName || 'Not assigned'}{staffBranch?.branchCode && <><br /><small>{staffBranch.branchCode}</small></>}</td><td><span className={`status ${staff.isVerified ? 'verified' : ''}`}>{staff.isVerified ? 'Verified' : 'Pending verification'}</span></td></tr>;
-                })}</tbody></table></div>
+                }} /></table></div>
                   : <p className="empty-state">No employees are assigned to this bank yet.</p>}
             <div className="bank-branch-layout">
               <div className="bank-branch-list">
@@ -968,20 +1051,22 @@ function FinancePayrollDashboard({ banks, token, onActivity }) {
   }
 
   const batchTotal = Number(amount || 0) * selectedEmployees.length;
+  const queuedPayrollTotal = batches.reduce((total, batch) => total + Number(batch.totalAmount || 0), 0);
+  const payrollEmployees = batches.reduce((total, batch) => total + (batch.employees?.length || 0), 0);
   return <>
-    <div className="bank-stats"><article className="balance-stat"><span>Assigned bank</span><strong>{selectedBank?.bankName || 'Not assigned'}</strong><small>Finance authorization by bank</small></article><article><span>Employees selected</span><strong>{selectedEmployees.length}</strong><small>Same amount per employee</small></article><article><span>Batch total</span><strong>{currency(batchTotal)}</strong><small>One grouped payroll batch</small></article></div>
+    <ReportCards items={[{ label: 'Assigned bank', value: selectedBank?.bankName || 'Not assigned', detail: 'Finance authorization by bank' }, { label: 'Queued batches', value: batches.length, detail: `${payrollEmployees} employee payments` }, { label: 'Queued payroll', value: currency(queuedPayrollTotal), detail: 'Total across listed batches' }, { label: 'Current batch', value: currency(batchTotal), detail: `${selectedEmployees.length} employees selected` }]} />
     {!banks.length ? <section className="bank-panel"><p className="empty-state">No bank is assigned to this Finance Manager account.</p></section> : <>
       <section className="bank-panel"><div className="bank-panel-heading"><div><span className="eyebrow">FINANCE · PAYROLL</span><h2>Prepare equal-amount payment</h2></div><Wallet size={22} /></div><form className="payroll-form" onSubmit={handleSubmit}>
         <label>Bank<select value={bankId} onChange={(event) => setBankId(event.target.value)} required>{banks.map((bank) => <option key={bank._id} value={bank._id}>{bank.bankName}</option>)}</select></label>
         <label>Sub-branch<select value={branchId} onChange={(event) => setBranchId(event.target.value)} required disabled={!selectedBank?.branches.length}><option value="">Select a sub-branch</option>{selectedBank?.branches.map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName} · {branch.branchCode}</option>)}</select></label>
         <label>Amount per employee (RWF)<input type="number" min="1" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} required /></label>
-        <div className="employee-picker"><div className="employee-picker-heading"><strong>Verified employees</strong><span>{loading ? 'Loading…' : `${employees.length} available`}</span></div>{employees.length ? employees.map((employee) => <label className="payroll-employee" key={employee._id}><input type="checkbox" checked={selectedEmployees.includes(employee._id)} onChange={() => toggleEmployee(employee._id)} /><span><strong>{employee.name}</strong><small>{employee.email}</small></span></label>) : <p className="empty-state">No verified employee accounts are available.</p>}</div>
+        <div className="employee-picker"><div className="employee-picker-heading"><strong>Verified employees</strong><span>{loading ? 'Loading…' : `${employees.length} available`}</span></div>{employees.length ? <PaginatedList items={employees} renderItem={(employee) => <label className="payroll-employee" key={employee._id}><input type="checkbox" checked={selectedEmployees.includes(employee._id)} onChange={() => toggleEmployee(employee._id)} /><span><strong>{employee.name}</strong><small>{employee.email}</small></span></label>} /> : <p className="empty-state">No verified employee accounts are available.</p>}</div>
         <div className="payroll-summary"><span>{selectedEmployees.length} employees × {currency(Number(amount || 0))}</span><strong>{currency(batchTotal)}</strong></div>
         {notice.text && <Notice notice={notice} />}
         <button className="bank-button" type="submit" disabled={submitting || loading || !branchId || !selectedEmployees.length}>{submitting ? 'Queueing batch…' : 'Queue payroll batch'}</button>
         <p className="form-disclaimer">All selected employees receive the same amount in one queued batch. This records a payment instruction; a payment provider is required to move funds.</p>
       </form></section>
-      <section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">PAYROLL QUEUE</span><h2>Recent batches</h2></div><Clock3 size={22} /></div>{batches.length ? <div className="payroll-batches">{batches.map((batch) => <article className="payroll-batch" key={batch._id}><div><strong>{batch.branchName} · {new Date(batch.createdAt).toLocaleString()}</strong><small>{batch.employees.length} employees · {currency(batch.amount)} each</small></div><strong>{currency(batch.totalAmount)}</strong><span className="loan-status pending">{batch.status}</span></article>)}</div> : <p className="empty-state">No payroll batches have been queued.</p>}</section>
+      <section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">PAYROLL QUEUE</span><h2>Recent batches</h2></div><Clock3 size={22} /></div>{batches.length ? <div className="payroll-batches"><PaginatedList items={batches} renderItem={(batch) => <article className="payroll-batch" key={batch._id}><div><strong>{batch.branchName} · {new Date(batch.createdAt).toLocaleString()}</strong><small>{batch.employees.length} employees · {currency(batch.amount)} each</small></div><strong>{currency(batch.totalAmount)}</strong><span className="loan-status pending">{batch.status}</span></article>} /></div> : <p className="empty-state">No payroll batches have been queued.</p>}</section>
     </>}
   </>;
 }
@@ -1014,20 +1099,165 @@ function AdminDepositDashboard({ token, banks, onActivity }) {
   const total = deposits.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
   return <>
     <div className="bank-stats"><article className="balance-stat"><span>Total deposits</span><strong>{currency(total)}</strong><small>Across customer accounts</small></article><article><span>Deposit transactions</span><strong>{deposits.length}</strong><small>Recorded deposits</small></article><article><span>Accounts with deposits</span><strong>{new Set(deposits.map((transaction) => transaction.accountId)).size}</strong><small>Customer accounts</small></article></div>
-    <section className="bank-panel"><div className="bank-panel-heading"><div><span className="eyebrow">ACCOUNT ACTIVITY</span><h2>Deposit history</h2></div><ArrowDownToLine size={23} /></div><div className="directory-toolbar bank-ledger-filters"><select aria-label="Filter by bank" value={selectedBankId} onChange={(event) => { setSelectedBankId(event.target.value); setSelectedBranchId(''); }}><option value="">All banks</option>{banks.map((bank) => <option key={bank._id} value={bank._id}>{bank.bankName}</option>)}</select><select aria-label="Filter by sub-branch" value={selectedBranchId} onChange={(event) => setSelectedBranchId(event.target.value)} disabled={!selectedBankId}><option value="">{selectedBankId ? 'All sub-branches' : 'Select a bank first'}</option>{selectedBank?.branches.map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName}{branch.branchCode ? ` · ${branch.branchCode}` : ''}</option>)}</select></div>{error && <p className="empty-state">{error}</p>}{loading ? <p className="empty-state">Loading deposit history...</p> : deposits.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Customer</th><th>Email / account</th><th>Date</th><th>Amount</th></tr></thead><tbody>{deposits.map((transaction) => <tr key={transaction._id}><td>{transaction.ownerName}</td><td>{transaction.ownerEmail || transaction.accountNumber}</td><td>{new Date(transaction.createdAt).toLocaleString()}</td><td><strong>{currency(transaction.amount)}</strong></td></tr>)}</tbody></table></div> : !error && <p className="empty-state">No deposits have been recorded yet.</p>}</section>
+    <section className="bank-panel"><div className="bank-panel-heading"><div><span className="eyebrow">ACCOUNT ACTIVITY</span><h2>Deposit history</h2></div><ArrowDownToLine size={23} /></div><div className="directory-toolbar bank-ledger-filters"><select aria-label="Filter by bank" value={selectedBankId} onChange={(event) => { setSelectedBankId(event.target.value); setSelectedBranchId(''); }}><option value="">All banks</option>{banks.map((bank) => <option key={bank._id} value={bank._id}>{bank.bankName}</option>)}</select><select aria-label="Filter by sub-branch" value={selectedBranchId} onChange={(event) => setSelectedBranchId(event.target.value)} disabled={!selectedBankId}><option value="">{selectedBankId ? 'All sub-branches' : 'Select a bank first'}</option>{selectedBank?.branches.map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName}{branch.branchCode ? ` · ${branch.branchCode}` : ''}</option>)}</select></div>{error && <p className="empty-state">{error}</p>}{loading ? <p className="empty-state">Loading deposit history...</p> : deposits.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Customer</th><th>Email / account</th><th>Date</th><th>Amount</th></tr></thead><PaginatedRows rows={deposits} colSpan={4} renderRow={(transaction) => <tr key={transaction._id}><td>{transaction.ownerName}</td><td>{transaction.ownerEmail || transaction.accountNumber}</td><td>{new Date(transaction.createdAt).toLocaleString()}</td><td><strong>{currency(transaction.amount)}</strong></td></tr>} /></table></div> : !error && <p className="empty-state">No deposits have been recorded yet.</p>}</section>
     <BankAccountManagementTable accounts={accounts} setAccounts={setAccounts} token={token} banks={banks} canManageAccounts onActivity={onActivity} />
   </>;
 }
 
-function BankMembersDashboard({ token, onActivity }) {
+function PaginationControls({ page, pageCount, total, start, end, onPageChange }) {
+  return <div className="bank-pagination" aria-label="Table pagination"><span>{total ? `Showing ${start}-${end} of ${total}` : 'No records'} · Page {page} of {pageCount}</span><button className="icon-button" type="button" aria-label="Previous page" disabled={page <= 1} onClick={() => onPageChange(page - 1)}><ChevronLeft size={16} /></button><button className="icon-button" type="button" aria-label="Next page" disabled={page >= pageCount} onClick={() => onPageChange(page + 1)}><ChevronRight size={16} /></button></div>;
+}
+
+function PaginatedRows({ rows, colSpan, renderRow, pageSize = 10 }) {
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
+  const startIndex = (page - 1) * pageSize;
+  const start = rows.length ? startIndex + 1 : 0;
+  const visibleRows = rows.slice(startIndex, startIndex + pageSize);
+  return <tbody>{visibleRows.map(renderRow)}<tr className="table-pagination-row"><td colSpan={colSpan}><PaginationControls page={page} pageCount={pageCount} total={rows.length} start={start} end={Math.min(start + pageSize - 1, rows.length)} onPageChange={setPage} /></td></tr></tbody>;
+}
+
+function PaginatedList({ items, renderItem, pageSize = 10 }) {
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
+  const startIndex = (page - 1) * pageSize;
+  const start = items.length ? startIndex + 1 : 0;
+  const visibleItems = items.slice(startIndex, startIndex + pageSize);
+  return <>{visibleItems.map(renderItem)}<PaginationControls page={page} pageCount={pageCount} total={items.length} start={start} end={Math.min(start + pageSize - 1, items.length)} onPageChange={setPage} /></>;
+}
+
+function ReportCards({ items }) {
+  return <div className="bank-stats report-cards">{items.map(({ label, value, detail }, index) => <article className={index === 0 ? 'balance-stat' : ''} key={label}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>)}</div>;
+}
+
+function BankAdminReportDashboard({ banks, token, loanApplications }) {
+  const [accounts, setAccounts] = useState([]);
   const [members, setMembers] = useState([]);
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [staff, setStaff] = useState([]);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const bank = banks[0];
+
+  useEffect(() => {
+    let active = true;
+    if (!token || !bank?._id) {
+      setLoading(false);
+      return () => { active = false; };
+    }
+    Promise.all([
+      getBankAccounts(token, { bankId: bank._id }),
+      getBankMembers(token),
+      getBankStaff(token)
+    ]).then(([accountResult, memberResult, staffResult]) => {
+      if (!active) return;
+      setAccounts(accountResult.accounts || []);
+      setMembers(memberResult.members || []);
+      setStaff(staffResult.staff || []);
+      setError('');
+    }).catch((loadError) => {
+      if (active) setError(loadError.message);
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [bank?._id, token]);
+
+  const totalBalances = accounts.reduce((total, account) => total + Number(account.balance || 0), 0);
+  const outstandingLoans = loanApplications.filter((loan) => loan.status === 'approved')
+    .reduce((total, loan) => total + Number(loan.outstandingPrincipal ?? loan.amount ?? 0), 0);
+  const approvedMembers = members.filter((member) => member.isApproved && member.isActive !== false).length;
+  const activeStaff = staff.filter((employee) => employee.isVerified && employee.isActive !== false).length;
+  const months = recentMonths();
+  const monthlyLoans = groupByMonth(loanApplications, months, (loan) => Number(loan.amount || 0));
+  const monthlyMembers = groupByMonth(members, months, () => 1);
+  const loanStatuses = ['pending', 'approved', 'declined', 'defaulted'].map((status) => ({
+    label: status[0].toUpperCase() + status.slice(1),
+    value: loanApplications.filter((loan) => loan.status === status).length
+  }));
+  const branches = (bank?.branches || []).map((branch) => ({
+    label: branch.branchName,
+    value: accounts.filter((account) => String(account.branchId?._id || account.branchId) === String(branch._id))
+      .reduce((total, account) => total + Number(account.balance || 0), 0)
+  }));
+
+  return <section className="financial-dashboard">
+    <header className="financial-dashboard-heading"><div><span className="eyebrow">BANK-WIDE REPORTING</span><h2>Financial Management Dashboard</h2><p>{bank?.bankName || 'Your bank'} · reports across all sub-branches</p></div><span className="report-refresh">{loading ? 'Refreshing reports…' : `Updated ${new Date().toLocaleString()}`}</span></header>
+    <ReportCards items={[
+      { label: 'Customer account balances', value: loading ? '—' : currency(totalBalances), detail: `${accounts.length} accounts across the bank` },
+      { label: 'Customer members', value: loading ? '—' : members.length, detail: `${approvedMembers} active` },
+      { label: 'Bank employees', value: loading ? '—' : staff.length, detail: `${activeStaff} active` },
+      { label: 'Loan applications', value: loanApplications.length, detail: `${loanApplications.filter((loan) => loan.status === 'pending').length} awaiting review` },
+      { label: 'Approved loan value', value: currency(outstandingLoans), detail: 'Approved principal / outstanding' }
+    ]} />
+    {error && <p className="notice error" role="alert">{error}</p>}
+    <div className="financial-chart-grid">
+      <ReportLineChart title="Loan application value" subtitle="Last 6 months" values={monthlyLoans} money />
+      <ReportBarChart title="Account balances by sub-branch" subtitle="Current customer account balances" values={branches} money />
+      <ReportBarChart title="Member registrations" subtitle="New members · last 6 months" values={monthlyMembers} />
+      <ReportBarChart title="Loan applications by status" subtitle="Current bank-wide application pipeline" values={loanStatuses} />
+    </div>
+  </section>;
+}
+
+function recentMonths() {
+  const now = new Date();
+  return Array.from({ length: 6 }, (_value, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1);
+    return { key: `${date.getFullYear()}-${date.getMonth()}`, label: date.toLocaleString(undefined, { month: 'short' }) };
+  });
+}
+
+function groupByMonth(items, months, getValue) {
+  return months.map((month) => ({
+    label: month.label,
+    value: items.filter((item) => {
+      const date = new Date(item.createdAt);
+      return `${date.getFullYear()}-${date.getMonth()}` === month.key;
+    }).reduce((total, item) => total + getValue(item), 0)
+  }));
+}
+
+function ReportLineChart({ title, subtitle, values, money = false }) {
+  const max = Math.max(...values.map((item) => item.value), 1);
+  const points = values.map((item, index) => ({
+    ...item,
+    x: values.length === 1 ? 50 : 8 + (index * 84) / (values.length - 1),
+    y: 82 - (item.value / max) * 62
+  }));
+  return <article className="report-chart"><h3>{title}</h3><p>{subtitle}</p><svg viewBox="0 0 100 100" role="img" aria-label={title}>
+    {[20, 40, 60, 80].map((y) => <line key={y} x1="5" x2="95" y1={y} y2={y} className="chart-grid-line" />)}
+    <polyline points={points.map(({ x, y }) => `${x},${y}`).join(' ')} className="chart-line" />
+    {points.map(({ x, y, label, value }) => <g key={label}><circle cx={x} cy={y} r="1.7" className="chart-point" /><text x={x} y="96" textAnchor="middle" className="chart-axis-label">{label}</text><title>{label}: {money ? currency(value) : value}</title></g>)}
+  </svg><div className="chart-legend"><span />{money ? 'Requested amount' : 'Applications'}</div></article>;
+}
+
+function ReportBarChart({ title, subtitle, values, money = false }) {
+  const max = Math.max(...values.map((item) => item.value), 1);
+  return <article className="report-chart"><h3>{title}</h3><p>{subtitle}</p><div className="chart-bars">{values.length ? values.map(({ label, value }) => <div className="chart-bar-column" key={label} title={`${label}: ${money ? currency(value) : value}`}><strong>{money ? currency(value) : value}</strong><div className="chart-bar-track"><span style={{ height: `${Math.max(value ? (value / max) * 100 : 0, value ? 4 : 0)}%` }} /></div><small>{label}</small></div>) : <p className="empty-state">No report data available.</p>}</div></article>;
+}
+
+function BankMembersDashboard({ token, banks, staffRole, onActivity }) {
+  const [members, setMembers] = useState([]);
+  const [form, setForm] = useState({ name: '', email: '', password: '', branchId: '' });
   const [notice, setNotice] = useState({ type: '', text: '' });
   const [approvalNotice, setApprovalNotice] = useState({ type: '', text: '' });
   const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [updatingMemberId, setUpdatingMemberId] = useState('');
+  const isBankAdmin = staffRole === 'bank_admin';
+
+  useEffect(() => {
+    if (isBankAdmin && !form.branchId && banks[0]?.branches?.length === 1) {
+      setForm((current) => ({ ...current, branchId: String(banks[0].branches[0]._id) }));
+    }
+  }, [banks, form.branchId, isBankAdmin]);
 
   useEffect(() => {
     let active = true;
@@ -1046,7 +1276,7 @@ function BankMembersDashboard({ token, onActivity }) {
       const { message } = await createBankMember(token, form);
       setNotice({ type: 'success', text: message || 'Member registered. A verification code was sent by email.' });
       onActivity('A bank member was registered and is awaiting approval.');
-      setForm({ name: '', email: '', password: '' });
+      setForm({ name: '', email: '', password: '', branchId: isBankAdmin ? '' : form.branchId });
       try {
         const { members: loadedMembers } = await getBankMembers(token);
         setMembers(loadedMembers);
@@ -1093,15 +1323,21 @@ function BankMembersDashboard({ token, onActivity }) {
     }
   }
 
+  const activeMembers = members.filter((member) => member.isActive !== false && member.isApproved).length;
+  const inactiveMembers = members.filter((member) => member.isActive === false).length;
+  const pendingVerification = members.filter((member) => !member.isVerified).length;
+  const pendingApproval = members.filter((member) => member.isVerified && !member.isApproved && member.isActive !== false).length;
+
   return <>
-    <section className="bank-panel"><div className="bank-panel-heading"><div><span className="eyebrow">BANK ADMINISTRATION</span><h2>Register a bank member</h2></div><UserPlus size={22} /></div><p className="form-disclaimer">Members registered here are automatically assigned to your bank sub-branch. They must verify their email before signing in, or you can approve and activate them below.</p><form className="bank-form member-registration-form" onSubmit={handleSubmit}><label htmlFor="member-name">Full name</label><input className="bank-text-input" id="member-name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} autoComplete="name" required /><label htmlFor="member-email">Email address</label><input className="bank-text-input" id="member-email" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} autoComplete="email" required /><label htmlFor="member-password">Temporary password</label><input className="bank-text-input" id="member-password" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} autoComplete="new-password" minLength={8} required />{notice.text && <Notice notice={notice} />}<button className="bank-button" type="submit" disabled={submitting}>{submitting ? 'Registering member...' : 'Register member'}</button></form></section>
-    <section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">BANK-WIDE MEMBER DIRECTORY</span><h2>Customer members</h2></div><UsersRound size={22} /></div>{approvalNotice.text && <div className="bank-notice"><Notice notice={approvalNotice} /></div>}{loadError && <p className="notice error" role="alert">{loadError}</p>}{loading ? <p className="empty-state">Loading bank members...</p> : members.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Member</th><th>Email</th><th>Sub-branch</th><th>Account status</th><th>Registered</th><th>Member access</th></tr></thead><tbody>{members.map((member) => { const active = member.isActive !== false; return <tr key={member._id}><td><strong>{member.name}</strong></td><td>{member.email}</td><td>{member.branch?.branchName || 'Not assigned'}{member.branch?.branchCode && <><br /><small>{member.branch.branchCode}</small></>}</td><td><span className={`status ${active && member.isApproved ? 'verified' : ''}`}>{!active ? 'Deactivated' : member.isApproved ? 'Active' : member.isVerified ? 'Email verified · awaiting approval' : 'Pending email verification'}</span></td><td>{new Date(member.createdAt).toLocaleDateString()}</td><td>{!active ? <button className="activate-button" type="button" disabled={updatingMemberId === member._id} onClick={() => approveMember(member._id)}>{updatingMemberId === member._id ? 'Activating...' : 'Activate member'}</button> : <>{!member.isApproved && <button className="activate-button" type="button" disabled={updatingMemberId === member._id} onClick={() => approveMember(member._id)}>{updatingMemberId === member._id ? 'Approving...' : 'Approve & activate'}</button>}<button className="deactivate-button" type="button" disabled={updatingMemberId === member._id} onClick={() => deactivateMember(member._id)}>{updatingMemberId === member._id ? 'Updating...' : 'Deactivate'}</button></>}</td></tr>; })}</tbody></table></div> : !loadError && <p className="empty-state">No members have been registered for your bank yet.</p>}</section>
+    <section className="bank-panel"><div className="bank-panel-heading"><div><span className="eyebrow">BANK ADMINISTRATION</span><h2>Register a bank member</h2></div><UserPlus size={22} /></div><p className="form-disclaimer">{isBankAdmin ? 'Choose the sub-branch for this member. They must verify their email before signing in, or you can approve and activate them below.' : 'Members registered here are assigned to your sub-branch. They must verify their email before signing in, or you can approve and activate them below.'}</p><form className="bank-form member-registration-form" onSubmit={handleSubmit}><label htmlFor="member-name">Full name</label><input className="bank-text-input" id="member-name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} autoComplete="name" required /><label htmlFor="member-email">Email address</label><input className="bank-text-input" id="member-email" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} autoComplete="email" required /><label htmlFor="member-password">Temporary password</label><input className="bank-text-input" id="member-password" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} autoComplete="new-password" minLength={8} required />{isBankAdmin && <><label htmlFor="member-branch">Sub-branch</label><select className="bank-text-input" id="member-branch" value={form.branchId} onChange={(event) => setForm({ ...form, branchId: event.target.value })} required><option value="">Select a sub-branch</option>{banks.flatMap((bank) => bank.branches || []).map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName}{branch.branchCode ? ` · ${branch.branchCode}` : ''}</option>)}</select></>}{notice.text && <Notice notice={notice} />}<button className="bank-button" type="submit" disabled={submitting || (isBankAdmin && !form.branchId)}>{submitting ? 'Registering member...' : 'Register member'}</button></form></section>
+    {!loading && <ReportCards items={[{ label: 'Customer members', value: members.length, detail: 'Across all sub-branches' }, { label: 'Active', value: activeMembers, detail: 'Approved and enabled' }, { label: 'Inactive', value: inactiveMembers, detail: 'Access disabled' }, { label: 'Verification / approval pending', value: pendingVerification + pendingApproval, detail: `${pendingVerification} verification · ${pendingApproval} approval` }]} />}
+    <section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">BANK-WIDE MEMBER DIRECTORY</span><h2>Customer members</h2></div><UsersRound size={22} /></div>{approvalNotice.text && <div className="bank-notice"><Notice notice={approvalNotice} /></div>}{loadError && <p className="notice error" role="alert">{loadError}</p>}{loading ? <p className="empty-state">Loading bank members...</p> : members.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Member</th><th>Email</th><th>Sub-branch</th><th>Account status</th><th>Registered</th><th>Member access</th></tr></thead><PaginatedRows rows={members} colSpan={6} renderRow={(member) => { const active = member.isActive !== false; return <tr key={member._id}><td><strong>{member.name}</strong></td><td>{member.email}</td><td>{member.branch?.branchName || 'Not assigned'}{member.branch?.branchCode && <><br /><small>{member.branch.branchCode}</small></>}</td><td><span className={`status ${active && member.isApproved ? 'verified' : ''}`}>{!active ? 'Deactivated' : member.isApproved ? 'Active' : member.isVerified ? 'Email verified · awaiting approval' : 'Pending email verification'}</span></td><td>{new Date(member.createdAt).toLocaleDateString()}</td><td>{!active ? <button className="activate-button" type="button" disabled={updatingMemberId === member._id} onClick={() => approveMember(member._id)}>{updatingMemberId === member._id ? 'Activating...' : 'Activate member'}</button> : <>{!member.isApproved && <button className="activate-button" type="button" disabled={updatingMemberId === member._id} onClick={() => approveMember(member._id)}>{updatingMemberId === member._id ? 'Approving...' : 'Approve & activate'}</button>}<button className="deactivate-button" type="button" disabled={updatingMemberId === member._id} onClick={() => deactivateMember(member._id)}>{updatingMemberId === member._id ? 'Updating...' : 'Deactivate'}</button></>}</td></tr>; }} /></table></div> : !loadError && <p className="empty-state">No members have been registered for your bank yet.</p>}</section>
   </>;
 }
 
-function BankStaffAdminDashboard({ token, onActivity }) {
+function BankStaffAdminDashboard({ token, banks, onActivity }) {
   const [staff, setStaff] = useState([]);
-  const [form, setForm] = useState({ name: '', email: '', password: '', staffRole: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', staffRole: '', branchId: '' });
   const [notice, setNotice] = useState({ type: '', text: '' });
   const [statusNotice, setStatusNotice] = useState({ type: '', text: '' });
   const [error, setError] = useState('');
@@ -1114,6 +1350,14 @@ function BankStaffAdminDashboard({ token, onActivity }) {
     setStaff(loadedStaff);
     setError('');
   }
+
+  const activeStaff = staff.filter((employee) => employee.isVerified && employee.isActive !== false).length;
+  const inactiveStaff = staff.filter((employee) => employee.isActive === false).length;
+  const pendingStaff = staff.filter((employee) => !employee.isVerified && employee.isActive !== false).length;
+  const roleCounts = BANK_STAFF_ROLES.map((role) => ({
+    label: role.label,
+    count: staff.filter((employee) => employee.staffRole === role.value).length
+  }));
 
   async function updateStaffStatus(employee, activate) {
     setUpdatingStaffId(employee._id);
@@ -1152,7 +1396,7 @@ function BankStaffAdminDashboard({ token, onActivity }) {
       const { message } = await createBankStaff(token, form);
       setNotice({ type: 'success', text: message || 'Bank staff account created. Verification email sent.' });
       onActivity('A bank staff account was registered.');
-      setForm({ name: '', email: '', password: '', staffRole: '' });
+      setForm({ name: '', email: '', password: '', staffRole: '', branchId: '' });
       try {
         await refreshStaff();
       } catch (refreshError) {
@@ -1166,8 +1410,85 @@ function BankStaffAdminDashboard({ token, onActivity }) {
   }
 
   return <>
-    <section className="bank-panel"><div className="bank-panel-heading"><div><span className="eyebrow">BANK TEAM</span><h2>Register bank staff</h2></div><UserPlus size={22} /></div><p className="form-disclaimer">Staff are assigned to your sub-branch. Choose the employee's job role; they must verify their email before signing in.</p><form className="bank-form" onSubmit={handleSubmit}><label htmlFor="staff-name">Full name</label><input className="bank-text-input" id="staff-name" autoComplete="name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /><label htmlFor="staff-email">Email address</label><input className="bank-text-input" id="staff-email" type="email" autoComplete="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /><label htmlFor="staff-password">Temporary password</label><input className="bank-text-input" id="staff-password" type="password" autoComplete="new-password" minLength={8} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required /><label htmlFor="staff-role">Bank role</label><select className="bank-text-input" id="staff-role" value={form.staffRole} onChange={(event) => setForm({ ...form, staffRole: event.target.value })} required><option value="">Select a role</option>{BANK_STAFF_ROLES.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}</select>{notice.text && <Notice notice={notice} />}<button className="bank-button" type="submit" disabled={submitting}>{submitting ? 'Registering staff...' : 'Register staff'}</button></form></section>
-    <section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">BANK-WIDE TEAM</span><h2>Staff and roles</h2></div><UsersRound size={22} /></div>{statusNotice.text && <div className="bank-notice"><Notice notice={statusNotice} /></div>}{error && <p className="notice error" role="alert">{error}</p>}{loading ? <p className="empty-state">Loading bank staff...</p> : staff.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Staff member</th><th>Role</th><th>Sub-branch</th><th>Status</th><th>Access</th></tr></thead><tbody>{staff.map((employee) => { const active = employee.isActive !== false; return <tr key={employee._id}><td><strong>{employee.name}</strong><br /><small>{employee.email}</small></td><td>{staffRoleName(employee.staffRole)}</td><td>{employee.branch?.branchName || 'Not assigned'}{employee.branch?.branchCode && <><br /><small>{employee.branch.branchCode}</small></>}</td><td><span className={`status ${employee.isVerified && active ? 'verified' : ''}`}>{!active ? 'Deactivated' : employee.isVerified ? 'Active' : 'Verification pending'}</span></td><td><button className={active ? 'deactivate-button' : 'activate-button'} type="button" disabled={updatingStaffId === employee._id} onClick={() => updateStaffStatus(employee, !active)}>{updatingStaffId === employee._id ? 'Updating...' : active ? 'Deactivate' : 'Activate'}</button></td></tr>; })}</tbody></table></div> : !error && <p className="empty-state">No staff are assigned to this bank.</p>}</section>
+    <section className="bank-panel"><div className="bank-panel-heading"><div><span className="eyebrow">BANK TEAM</span><h2>Register bank staff</h2></div><UserPlus size={22} /></div><p className="form-disclaimer">Assign each employee to a sub-branch. Bank Admin accounts are created by the System Admin.</p><form className="bank-form" onSubmit={handleSubmit}><label htmlFor="staff-name">Full name</label><input className="bank-text-input" id="staff-name" autoComplete="name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /><label htmlFor="staff-email">Email address</label><input className="bank-text-input" id="staff-email" type="email" autoComplete="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /><label htmlFor="staff-password">Temporary password</label><input className="bank-text-input" id="staff-password" type="password" autoComplete="new-password" minLength={8} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required /><label htmlFor="staff-role">Bank role</label><select className="bank-text-input" id="staff-role" value={form.staffRole} onChange={(event) => setForm({ ...form, staffRole: event.target.value })} required><option value="">Select a role</option>{BANK_STAFF_ROLES.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}</select><label htmlFor="staff-branch">Sub-branch</label><select className="bank-text-input" id="staff-branch" value={form.branchId} onChange={(event) => setForm({ ...form, branchId: event.target.value })} required><option value="">Select a sub-branch</option>{banks.flatMap((bank) => bank.branches || []).map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName}{branch.branchCode ? ` · ${branch.branchCode}` : ''}</option>)}</select>{notice.text && <Notice notice={notice} />}<button className="bank-button" type="submit" disabled={submitting || !form.branchId}>{submitting ? 'Registering staff...' : 'Register staff'}</button></form></section>
+    {!loading && <ReportCards items={[{ label: 'Bank employees', value: staff.length, detail: 'Across all sub-branches' }, { label: 'Active', value: activeStaff, detail: 'Verified and enabled' }, { label: 'Verification pending', value: pendingStaff, detail: `${inactiveStaff} deactivated` }, ...roleCounts.map(({ label, count }) => ({ label, value: count, detail: 'Employees in role' }))]} />}
+    <section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">BANK-WIDE TEAM</span><h2>Staff and roles</h2></div><UsersRound size={22} /></div>{statusNotice.text && <div className="bank-notice"><Notice notice={statusNotice} /></div>}{error && <p className="notice error" role="alert">{error}</p>}{loading ? <p className="empty-state">Loading bank staff...</p> : staff.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Staff member</th><th>Role</th><th>Sub-branch</th><th>Status</th><th>Access</th></tr></thead><PaginatedRows rows={staff} colSpan={5} renderRow={(employee) => { const active = employee.isActive !== false; return <tr key={employee._id}><td><strong>{employee.name}</strong><br /><small>{employee.email}</small></td><td>{staffRoleName(employee.staffRole)}</td><td>{employee.branch?.branchName || 'Not assigned'}{employee.branch?.branchCode && <><br /><small>{employee.branch.branchCode}</small></>}</td><td><span className={`status ${employee.isVerified && active ? 'verified' : ''}`}>{!active ? 'Deactivated' : employee.isVerified ? 'Active' : 'Verification pending'}</span></td><td><button className={active ? 'deactivate-button' : 'activate-button'} type="button" disabled={updatingStaffId === employee._id} onClick={() => updateStaffStatus(employee, !active)}>{updatingStaffId === employee._id ? 'Updating...' : active ? 'Deactivate' : 'Activate'}</button></td></tr>; }} /></table></div> : !error && <p className="empty-state">No staff are assigned to this bank.</p>}</section>
+  </>;
+}
+
+function HRDashboard({ token }) {
+  const [staff, setStaff] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([getBankStaff(token), getBankMembers(token)])
+      .then(([staffResult, memberResult]) => {
+        if (!active) return;
+        setStaff(staffResult.staff || []);
+        setMembers(memberResult.members || []);
+        setError('');
+      })
+      .catch((loadError) => { if (active) setError(loadError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [token]);
+
+  const activeStaff = staff.filter((employee) => employee.isVerified && employee.isActive !== false);
+  const pendingStaff = staff.filter((employee) => !employee.isVerified && employee.isActive !== false);
+  const deactivatedStaff = staff.filter((employee) => employee.isActive === false);
+  const activeMembers = members.filter((member) => member.isApproved && member.isActive !== false);
+  const roleBreakdown = ['bank_admin', 'branch_manager', 'general_manager', 'hr_manager', 'finance_manager', 'accounts_manager']
+    .map((role) => ({
+      label: staffRoleName(role),
+      value: staff.filter((employee) => (employee.staffRole || 'branch_manager') === role).length
+    })).filter((item) => item.value > 0);
+  const branchBreakdown = [...new Set(staff.map((employee) => employee.branch?.branchName || 'Unassigned'))]
+    .map((branchName) => ({
+      label: branchName,
+      value: staff.filter((employee) => (employee.branch?.branchName || 'Unassigned') === branchName).length
+    }));
+  const visibleStaff = staff.filter((employee) => {
+    const matchesSearch = `${employee.name} ${employee.email}`.toLowerCase().includes(search.trim().toLowerCase());
+    const matchesRole = !roleFilter || (employee.staffRole || 'branch_manager') === roleFilter;
+    const matchesBranch = !branchFilter || String(employee.branch?._id || '') === branchFilter;
+    const status = employee.isActive === false ? 'deactivated' : employee.isVerified ? 'active' : 'pending';
+    const matchesStatus = !statusFilter || status === statusFilter;
+    return matchesSearch && matchesRole && matchesBranch && matchesStatus;
+  });
+  const branches = [...new Map(staff.filter((employee) => employee.branch?._id)
+    .map((employee) => [String(employee.branch._id), employee.branch])).values()];
+
+  return <>
+    {!loading && <ReportCards items={[
+      { label: 'Total employees', value: staff.length, detail: 'Across all bank sub-branches' },
+      { label: 'Active employees', value: activeStaff.length, detail: 'Verified and enabled' },
+      { label: 'Verification pending', value: pendingStaff.length, detail: 'Awaiting activation' },
+      { label: 'Deactivated', value: deactivatedStaff.length, detail: 'Access disabled' },
+      { label: 'Active customer members', value: activeMembers.length, detail: 'Bank-wide workforce directory context' }
+    ]} />}
+    {error && <p className="notice error" role="alert">{error}</p>}
+    <div className="financial-chart-grid hr-report-charts">
+      <ReportBarChart title="Employees by role" subtitle="Bank-wide role distribution" values={roleBreakdown} />
+      <ReportBarChart title="Employees by sub-branch" subtitle="Assigned staff headcount" values={branchBreakdown} />
+    </div>
+    <section className="bank-panel transaction-panel">
+      <div className="bank-panel-heading"><div><span className="eyebrow">PEOPLE OPERATIONS</span><h2>Employee directory</h2></div><UsersRound size={22} /></div>
+      <p className="form-disclaimer">HR view-only workspace: review staff role, sub-branch assignment, account access status, and account creation date. Bank Admins manage employee access and assignments.</p>
+      <div className="directory-toolbar hr-directory-filters">
+        <input aria-label="Search employees" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name or email" />
+        <select aria-label="Filter by role" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}><option value="">All roles</option>{['bank_admin', 'branch_manager', 'general_manager', 'hr_manager', 'finance_manager', 'accounts_manager'].map((role) => <option key={role} value={role}>{staffRoleName(role)}</option>)}</select>
+        <select aria-label="Filter by sub-branch" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}><option value="">All sub-branches</option>{branches.map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName}</option>)}</select>
+        <select aria-label="Filter by account status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All statuses</option><option value="active">Active</option><option value="pending">Verification pending</option><option value="deactivated">Deactivated</option></select>
+      </div>
+      {loading ? <p className="empty-state">Loading HR dashboard…</p> : visibleStaff.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Employee</th><th>Role</th><th>Sub-branch</th><th>Account status</th><th>Account created</th></tr></thead><PaginatedRows rows={visibleStaff} colSpan={5} renderRow={(employee) => <tr key={employee._id}><td><strong>{employee.name}</strong><br /><small>{employee.email}</small></td><td>{staffRoleName(employee.staffRole)}</td><td>{employee.branch?.branchName || 'Not assigned'}{employee.branch?.branchCode && <><br /><small>{employee.branch.branchCode}</small></>}</td><td><span className={`status ${employee.isVerified && employee.isActive !== false ? 'verified' : ''}`}>{employee.isActive === false ? 'Deactivated' : employee.isVerified ? 'Active' : 'Verification pending'}</span></td><td>{new Date(employee.createdAt).toLocaleDateString()}</td></tr>} /></table></div> : !error && <p className="empty-state">No employees match the selected filters.</p>}
+    </section>
   </>;
 }
 
@@ -1190,7 +1511,9 @@ function BankStaffDirectoryDashboard({ token }) {
     return () => { active = false; };
   }, [token]);
 
-  return <section className="bank-panel"><div className="bank-panel-heading"><div><span className="eyebrow">BANK-WIDE DIRECTORY</span><h2>Employees and customer members</h2></div><UsersRound size={22} /></div><p className="form-disclaimer">View-only directory for all sub-branches in your assigned bank.</p>{error && <p className="notice error" role="alert">{error}</p>}{loading ? <p className="empty-state">Loading bank-wide directory...</p> : <><h3>Bank employees</h3>{staff.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Employee</th><th>Role</th><th>Sub-branch</th><th>Status</th></tr></thead><tbody>{staff.map((employee) => <tr key={employee._id}><td><strong>{employee.name}</strong><br /><small>{employee.email}</small></td><td>{staffRoleName(employee.staffRole)}</td><td>{employee.branch?.branchName || 'Not assigned'}{employee.branch?.branchCode && <><br /><small>{employee.branch.branchCode}</small></>}</td><td>{employee.isActive === false ? 'Deactivated' : employee.isVerified ? 'Active' : 'Verification pending'}</td></tr>)}</tbody></table></div> : <p className="empty-state">No bank employees found.</p>}<h3>Customer members</h3>{members.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Member</th><th>Email</th><th>Sub-branch</th><th>Status</th><th>Registered</th></tr></thead><tbody>{members.map((member) => <tr key={member._id}><td><strong>{member.name}</strong></td><td>{member.email}</td><td>{member.branch?.branchName || 'Not assigned'}{member.branch?.branchCode && <><br /><small>{member.branch.branchCode}</small></>}</td><td>{member.isActive === false ? 'Deactivated' : member.isApproved ? 'Active' : member.isVerified ? 'Email verified · awaiting approval' : 'Pending email verification'}</td><td>{new Date(member.createdAt).toLocaleDateString()}</td></tr>)}</tbody></table></div> : <p className="empty-state">No customer members found.</p>}</>}</section>;
+  const activeStaff = staff.filter((employee) => employee.isVerified && employee.isActive !== false).length;
+  const activeMembers = members.filter((member) => member.isApproved && member.isActive !== false).length;
+  return <><ReportCards items={[{ label: 'Employees', value: staff.length, detail: `${activeStaff} active across bank` }, { label: 'Customer members', value: members.length, detail: `${activeMembers} active across bank` }, { label: 'Total people', value: staff.length + members.length, detail: 'All bank sub-branches' }]} /><section className="bank-panel"><div className="bank-panel-heading"><div><span className="eyebrow">BANK-WIDE DIRECTORY</span><h2>Employees and customer members</h2></div><UsersRound size={22} /></div><p className="form-disclaimer">View-only directory for all sub-branches in your assigned bank.</p>{error && <p className="notice error" role="alert">{error}</p>}{loading ? <p className="empty-state">Loading bank-wide directory...</p> : <><h3>Bank employees</h3>{staff.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Employee</th><th>Role</th><th>Sub-branch</th><th>Status</th></tr></thead><PaginatedRows rows={staff} colSpan={4} renderRow={(employee) => <tr key={employee._id}><td><strong>{employee.name}</strong><br /><small>{employee.email}</small></td><td>{staffRoleName(employee.staffRole)}</td><td>{employee.branch?.branchName || 'Not assigned'}{employee.branch?.branchCode && <><br /><small>{employee.branch.branchCode}</small></>}</td><td>{employee.isActive === false ? 'Deactivated' : employee.isVerified ? 'Active' : 'Verification pending'}</td></tr>} /></table></div> : <p className="empty-state">No bank employees found.</p>}<h3>Customer members</h3>{members.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Member</th><th>Email</th><th>Sub-branch</th><th>Status</th><th>Registered</th></tr></thead><PaginatedRows rows={members} colSpan={5} renderRow={(member) => <tr key={member._id}><td><strong>{member.name}</strong></td><td>{member.email}</td><td>{member.branch?.branchName || 'Not assigned'}{member.branch?.branchCode && <><br /><small>{member.branch.branchCode}</small></>}</td><td>{member.isActive === false ? 'Deactivated' : member.isApproved ? 'Active' : member.isVerified ? 'Email verified · awaiting approval' : 'Pending email verification'}</td><td>{new Date(member.createdAt).toLocaleDateString()}</td></tr>} /></table></div> : <p className="empty-state">No customer members found.</p>}</>}</section></>;
 }
 
 function GeneralManagerDashboard({ banks, token, loanApplications }) {
@@ -1220,12 +1543,14 @@ function GeneralManagerDashboard({ banks, token, loanApplications }) {
 }
 
 function staffRoleName(role) {
-  return BANK_STAFF_ROLES.find((item) => item.value === role)?.label || 'Branch Manager / Bank Admin';
+  return role === 'bank_admin' ? 'Bank Admin' : BANK_STAFF_ROLES.find((item) => item.value === role)?.label || 'Sub-branch Manager';
 }
 
 function BankAccountManagementTable({ accounts, setAccounts, token, banks, canManageAccounts = false, onActivity }) {
   const [busyAccountId, setBusyAccountId] = useState('');
   const [notice, setNotice] = useState({ type: '', text: '' });
+  const activeAccounts = accounts.filter((account) => account.status === 'active');
+  const totalBalance = accounts.reduce((total, account) => total + Number(account.balance || 0), 0);
 
   async function toggleStatus(account) {
     const status = account.status === 'active' ? 'inactive' : 'active';
@@ -1243,7 +1568,7 @@ function BankAccountManagementTable({ accounts, setAccounts, token, banks, canMa
     }
   }
 
-  return <section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">ACCOUNT MANAGEMENT</span><h2>Bank accounts</h2></div><Building2 size={22} /></div>{notice.text && <div className="bank-notice"><Notice notice={notice} /></div>}{accounts.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Account</th><th>Customer</th><th>Bank</th><th>Balance</th><th>Status</th>{canManageAccounts && <th>Action</th>}</tr></thead><tbody>{accounts.map((account) => <tr key={account._id}><td>{account.accountNumber}<br /><small>{account.accountName}</small></td><td>{account.userId?.name || 'Customer'}<br /><small>{account.userId?.email}</small></td><td>{account.bankId?.bankName || banks.find((bank) => String(bank._id) === String(account.bankId))?.bankName || 'Bank'}</td><td>{currency(account.balance)}</td><td><span className={`status ${account.status === 'active' ? 'verified' : ''}`}>{account.status}</span></td>{canManageAccounts && <td><button className={account.status === 'active' ? 'delete-button' : 'activate-button'} type="button" disabled={busyAccountId === account._id} onClick={() => toggleStatus(account)}>{busyAccountId === account._id ? 'Saving...' : account.status === 'active' ? 'Deactivate' : 'Activate'}</button></td>}</tr>)}</tbody></table></div> : <p className="empty-state">No bank accounts are available for this sub-branch.</p>}</section>;
+  return <><ReportCards items={[{ label: 'Accounts', value: accounts.length, detail: `${activeAccounts.length} active · ${accounts.length - activeAccounts.length} inactive` }, { label: 'Total balances', value: currency(totalBalance), detail: 'Across listed accounts' }, { label: 'Average balance', value: currency(accounts.length ? totalBalance / accounts.length : 0), detail: 'Per bank account' }]} /><section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">ACCOUNT MANAGEMENT</span><h2>Bank accounts</h2></div><Building2 size={22} /></div>{notice.text && <div className="bank-notice"><Notice notice={notice} /></div>}{accounts.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Account</th><th>Customer</th><th>Bank</th><th>Balance</th><th>Status</th>{canManageAccounts && <th>Action</th>}</tr></thead><PaginatedRows rows={accounts} colSpan={canManageAccounts ? 6 : 5} renderRow={(account) => <tr key={account._id}><td>{account.accountNumber}<br /><small>{account.accountName}</small></td><td>{account.userId?.name || 'Customer'}<br /><small>{account.userId?.email}</small></td><td>{account.bankId?.bankName || banks.find((bank) => String(bank._id) === String(account.bankId))?.bankName || 'Bank'}</td><td>{currency(account.balance)}</td><td><span className={`status ${account.status === 'active' ? 'verified' : ''}`}>{account.status}</span></td>{canManageAccounts && <td><button className={account.status === 'active' ? 'delete-button' : 'activate-button'} type="button" disabled={busyAccountId === account._id} onClick={() => toggleStatus(account)}>{busyAccountId === account._id ? 'Saving...' : account.status === 'active' ? 'Deactivate' : 'Activate'}</button></td>}</tr>} /></table></div> : <p className="empty-state">No bank accounts are available for this sub-branch.</p>}</section></>;
 }
 
 function StatCard({ label, value, detail, tone = 'violet' }) { return <article className={`stat-card ${tone}`}><div className="stat-label">{label}<span className="stat-menu">...</span></div><strong>{value}</strong><small>{detail}</small></article>; }
@@ -1253,17 +1578,71 @@ function AdminDashboard({ users, pagination, query, setQuery, onActivateUser, on
   return <><div className="stats-grid"><StatCard label="Total users" value={pagination.total} detail="Accounts in your workspace" /><StatCard label="Verified accounts" value={verified} detail="On this page" tone="green" /><StatCard label="Pending verification" value={users.length - verified} detail="On this page" tone="orange" /><StatCard label="Admin status" value="Active" detail="Full workspace access" tone="blue" /></div><div className={`dashboard-grid role-grid ${section === 'users' ? 'directory-focus' : ''}`}><section className="panel users-panel"><PanelHeading eyebrow="ADMIN DIRECTORY" title="All accounts" icon={<UsersRound size={22} />} /><div className="directory-toolbar"><input value={query.search} onChange={(event) => setQuery({ ...query, page: 1, search: event.target.value })} placeholder="Search name or email" /><select value={query.sortBy} onChange={(event) => setQuery({ ...query, page: 1, sortBy: event.target.value })}><option value="createdAt">Newest</option><option value="name">Name</option><option value="email">Email</option><option value="role">Role</option></select><select value={query.sortOrder} onChange={(event) => setQuery({ ...query, page: 1, sortOrder: event.target.value })}><option value="desc">Desc</option><option value="asc">Asc</option></select></div><UserList users={users} /><div className="pagination"><button className="icon-button" disabled={pagination.page <= 1} onClick={() => setQuery({ ...query, page: pagination.page - 1 })} title="Previous page"><ChevronLeft size={16} /></button><span>Page {pagination.page} of {Math.max(pagination.totalPages, 1)}</span><button className="icon-button" disabled={pagination.page >= pagination.totalPages} onClick={() => setQuery({ ...query, page: pagination.page + 1 })} title="Next page"><ChevronRight size={16} /></button></div></section>{section !== 'users' && <section className="panel insight-panel"><PanelHeading eyebrow="CONTROL CENTER" title="Workspace health" icon={<ShieldCheck size={22} />} /><div className="health-ring"><div><strong>{users.length ? Math.round((verified / users.length) * 100) : 0}%</strong><small>this page</small></div></div><div className="legend-row"><span className="dot green-dot" /> Verified <b>{verified}</b></div><div className="legend-row"><span className="dot orange-dot" /> Pending <b>{users.length - verified}</b></div></section>}</div></>;
 }
 
+function GuestFeedbackDashboard({ token }) {
+  const [feedback, setFeedback] = useState([]);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState('');
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    getGuestFeedback(token)
+      .then(({ feedback: loadedFeedback }) => { if (active) setFeedback(loadedFeedback || []); })
+      .catch((loadError) => { if (active) setError(loadError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [token]);
+
+  async function markReviewed(item) {
+    setUpdatingId(item._id);
+    setError('');
+    try {
+      const { feedback: updated } = await markGuestFeedbackReviewed(token, item._id);
+      setFeedback((current) => current.map((entry) => entry._id === item._id ? { ...entry, ...updated } : entry));
+    } catch (updateError) {
+      setError(updateError.message);
+    } finally {
+      setUpdatingId('');
+    }
+  }
+
+  const openFeedback = feedback.filter((item) => !item.reviewedAt).length;
+  const averageRating = feedback.length
+    ? (feedback.reduce((sum, item) => sum + item.rating, 0) / feedback.length).toFixed(1)
+    : '—';
+  const visibleFeedback = feedback.filter((item) => `${item.category} ${item.message}`.toLowerCase().includes(search.trim().toLowerCase()));
+
+  return <>
+    <ReportCards items={[
+      { label: 'Feedback received', value: feedback.length, detail: 'Latest 200 anonymous submissions' },
+      { label: 'Needs review', value: openFeedback, detail: 'Not yet marked reviewed' },
+      { label: 'Average rating', value: averageRating, detail: 'Out of 5' }
+    ]} />
+    <section className="bank-panel transaction-panel">
+      <div className="bank-panel-heading"><div><span className="eyebrow">GUEST EXPERIENCE</span><h2>Anonymous feedback</h2></div><MessageSquareText size={22} /></div>
+      <p className="form-disclaimer">No guest identity or contact information is collected. Feedback is rate-limited and stored for administrator review.</p>
+      <div className="directory-toolbar"><input aria-label="Search guest feedback" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search category or message" /></div>
+      {error && <p className="notice error" role="alert">{error}</p>}
+      {loading ? <p className="empty-state">Loading guest feedback…</p> : visibleFeedback.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Submitted</th><th>Category</th><th>Rating</th><th>Feedback</th><th>Status</th><th>Action</th></tr></thead><PaginatedRows rows={visibleFeedback} colSpan={6} renderRow={(item) => <tr key={item._id}><td>{new Date(item.createdAt).toLocaleString()}</td><td>{item.category.replaceAll('-', ' ')}</td><td>{item.rating}/5</td><td className="guest-feedback-cell">{item.message}</td><td><span className={`status ${item.reviewedAt ? 'verified' : ''}`}>{item.reviewedAt ? 'Reviewed' : 'New'}</span></td><td>{!item.reviewedAt && <button className="manage-button" type="button" disabled={updatingId === item._id} onClick={() => markReviewed(item)}>{updatingId === item._id ? 'Saving…' : 'Mark reviewed'}</button>}</td></tr>} /></table></div> : !error && <p className="empty-state">No feedback matches your search.</p>}
+    </section>
+  </>;
+}
+
 function ManagerDashboard({ applications, systemAnnualInterestRate, section, notice, readOnly = false, onDecision, onRepayment, onDefault }) {
   const pending = applications.filter((application) => application.status === 'pending');
   const decided = applications.filter((application) => application.status !== 'pending');
   const visibleApplications = section === 'applications' ? applications : pending.slice(0, 4);
+  const approved = applications.filter((application) => application.status === 'approved').length;
+  const repaid = applications.filter((application) => application.status === 'repaid').length;
+  const defaulted = applications.filter((application) => application.status === 'defaulted').length;
   const interestIncome = applications.reduce((total, loan) => total + (loan.interestIncome || 0), 0);
   const losses = applications.reduce((total, loan) => total + (loan.loss || 0), 0);
   return <>
-    <div className="bank-stats"><article><span>Awaiting review</span><strong>{pending.length}</strong><small>Loan requests needing a decision</small></article><article><span>Interest income</span><strong>{currency(interestIncome)}</strong><small>Collected from repayments</small></article><article><span>Principal loss</span><strong>{currency(losses)}</strong><small>Outstanding principal defaulted</small></article><article><span>Net profit</span><strong>{currency(interestIncome - losses)}</strong><small>Interest income less principal loss</small></article></div>
+    <ReportCards items={[{ label: 'Applications', value: applications.length, detail: `${pending.length} awaiting review` }, { label: 'Approved loans', value: approved, detail: `${repaid} fully repaid` }, { label: 'Defaults', value: defaulted, detail: 'Loans recorded in default' }, { label: 'Interest income', value: currency(interestIncome), detail: 'Collected from repayments' }, { label: 'Principal loss', value: currency(losses), detail: 'Outstanding principal defaulted' }, { label: 'Net profit', value: currency(interestIncome - losses), detail: 'Interest income less principal loss' }]} />
     <section className="bank-panel"><div className="bank-panel-heading"><div><span className="eyebrow">CREDIT REVIEW</span><h2>{section === 'applications' ? 'All loan applications' : 'Applications to review'}</h2></div><HandCoins size={23} /></div>
       {notice.text && <div className="bank-notice"><Notice notice={notice} /></div>}
-      {visibleApplications.length ? <div className="user-table-wrap"><table className="user-table loan-management-table"><thead><tr><th>Applicant / amount</th><th>Bank / purpose</th><th>Review status</th><th>{readOnly ? 'Financial summary' : 'Management actions'}</th></tr></thead><tbody>{visibleApplications.map((application) => <LoanApplicationCard key={application._id} application={application} systemAnnualInterestRate={systemAnnualInterestRate} readOnly={readOnly} onDecision={onDecision} onRepayment={onRepayment} onDefault={onDefault} />)}</tbody></table></div> : <p className="empty-state">{decided.length ? 'No applications in this view.' : 'No applications have been submitted yet.'}</p>}
+      {visibleApplications.length ? <div className="user-table-wrap"><table className="user-table loan-management-table"><thead><tr><th>Applicant / amount</th><th>Bank / purpose</th><th>Review status</th><th>{readOnly ? 'Financial summary' : 'Management actions'}</th></tr></thead><PaginatedRows rows={visibleApplications} colSpan={4} renderRow={(application) => <LoanApplicationCard key={application._id} application={application} systemAnnualInterestRate={systemAnnualInterestRate} readOnly={readOnly} onDecision={onDecision} onRepayment={onRepayment} onDefault={onDefault} />} /></table></div> : <p className="empty-state">{decided.length ? 'No applications in this view.' : 'No applications have been submitted yet.'}</p>}
     </section>
   </>;
 }
@@ -1303,7 +1682,7 @@ function LoanApplicationCard({ application, systemAnnualInterestRate, readOnly =
   </tr>;
 }
 
-function UserDashboard({ profile, banks, applications, notice, setNotice, onLoanApplication, onRefreshBanks, onActivity, token, systemAnnualInterestRate }) {
+function UserDashboard({ profile, banks, applications, notice, setNotice, onLoanApplication, onVirtualLoanPayment, onRefreshBanks, onActivity, token, systemAnnualInterestRate }) {
   const [depositAmount, setDepositAmount] = useState('');
   const [depositPhoneNumber, setDepositPhoneNumber] = useState('');
   const [depositAccountId, setDepositAccountId] = useState('');
@@ -1325,6 +1704,8 @@ function UserDashboard({ profile, banks, applications, notice, setNotice, onLoan
   const activeAccounts = bankAccounts.filter((account) => account.status === 'active');
   const balance = activeAccounts.reduce((total, account) => total + Number(account.balance || 0), 0);
   const latestApplications = applications.slice(0, 3);
+  const transactions = bankAccounts.flatMap((account) => (account.transactions || []).map((transaction) => ({ ...transaction, accountName: account.accountName, accountNumber: account.accountNumber })))
+    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
   const activeLoan = applications.find((application) => ['approved', 'defaulted'].includes(application.status));
   const hasExistingApplication = applications.length > 0;
   const selectedLoanBank = banks.find((bank) => bank._id === loanForm.bankId);
@@ -1490,7 +1871,7 @@ function UserDashboard({ profile, banks, applications, notice, setNotice, onLoan
         <button className="bank-button" type="submit" disabled={submittingAccount}>{submittingAccount ? 'Opening account...' : 'Open bank account'}</button>
       </form>
       {accountNotice.text && <div className="bank-notice"><Notice notice={accountNotice} /></div>}
-      {bankAccounts.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Account</th><th>Bank</th><th>Status</th><th>Available balance</th></tr></thead><tbody>{bankAccounts.map((account) => <tr key={account._id}><td><strong>{account.accountName}</strong><br /><small>{account.accountNumber}</small></td><td>{account.bankId?.bankName || 'Bank'}</td><td><span className={`status ${account.status === 'active' ? 'verified' : ''}`}>{account.status}</span></td><td><strong>{currency(account.balance)}</strong></td></tr>)}</tbody></table></div> : <p className="empty-state">No bank accounts opened yet.</p>}
+      {bankAccounts.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Account</th><th>Bank</th><th>Status</th><th>Available balance</th></tr></thead><PaginatedRows rows={bankAccounts} colSpan={4} renderRow={(account) => <tr key={account._id}><td><strong>{account.accountName}</strong><br /><small>{account.accountNumber}</small></td><td>{account.bankId?.bankName || 'Bank'}</td><td><span className={`status ${account.status === 'active' ? 'verified' : ''}`}>{account.status}</span></td><td><strong>{currency(account.balance)}</strong></td></tr>} /></table></div> : <p className="empty-state">No bank accounts opened yet.</p>}
     </section>
     <section className="bank-panel"><div className="bank-panel-heading"><div><span className="eyebrow">TRANSFER</span><h2>Move funds between accounts</h2></div><ArrowRight size={23} /></div>
       <form className="bank-form" onSubmit={handleTransfer}>
@@ -1511,15 +1892,64 @@ function UserDashboard({ profile, banks, applications, notice, setNotice, onLoan
         <button className="bank-button" type="submit" disabled={submittingTransfer || !activeAccounts.length}>{submittingTransfer ? 'Transferring...' : 'Transfer funds'}</button>
       </form>
     </section>
-    <section className="bank-panel transaction-panel" id="customer-activity"><div className="bank-panel-heading"><div><span className="eyebrow">ACCOUNT ACTIVITY</span><h2>All transactions</h2></div><Wallet size={22} /></div>{bankAccounts.flatMap((account) => (account.transactions || []).map((transaction) => ({ ...transaction, accountName: account.accountName, accountNumber: account.accountNumber }))).sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt)).length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Date</th><th>Account</th><th>Transaction</th><th>Amount</th><th>Balance after</th></tr></thead><tbody>{bankAccounts.flatMap((account) => (account.transactions || []).map((transaction) => ({ ...transaction, accountName: account.accountName, accountNumber: account.accountNumber }))).sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt)).map((transaction) => <tr key={`${transaction.accountNumber}-${transaction._id}`}><td>{new Date(transaction.createdAt).toLocaleString()}</td><td>{transaction.accountName}<br /><small>{transaction.accountNumber}</small></td><td>{transaction.description || transaction.type.replaceAll('_', ' ')}</td><td className={['deposit', 'transfer_in', 'loan_disbursement'].includes(transaction.type) ? 'financial-positive' : 'financial-negative'}>{['deposit', 'transfer_in', 'loan_disbursement'].includes(transaction.type) ? '+' : '-'}{currency(transaction.amount)}</td><td>{currency(transaction.balanceAfter)}</td></tr>)}</tbody></table></div> : <p className="empty-state">Your account activity will appear here.</p>}</section>
-    <section className="bank-panel loans-panel" id="customer-applications"><div className="bank-panel-heading"><div><span className="eyebrow">APPLICATION TRACKER</span><h2>Your loan requests</h2></div><Clock3 size={22} /></div>{latestApplications.length ? <div className="loan-list">{latestApplications.map((application) => <article className="loan-row" key={application._id}><div><strong><LoanMoney amount={application.amount} /> · {application.bankName}</strong><small>{application.purpose} · {application.branchName} · {application.termMonths} months</small>{application.annualInterestRate !== undefined && <small>{application.annualInterestRate}% annual interest · {currency(application.monthlyPayment)} estimated monthly payment</small>}<small>{currency(application.interestIncome)} interest income · {currency(application.loss)} principal loss</small></div><span className={`loan-status ${application.status}`}>{application.status}</span></article>)}</div> : <p className="empty-state">You have not applied for a loan yet.</p>}</section>
+    <section className="bank-panel transaction-panel" id="customer-activity"><div className="bank-panel-heading"><div><span className="eyebrow">ACCOUNT ACTIVITY</span><h2>All transactions</h2></div><Wallet size={22} /></div>{transactions.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Date</th><th>Account</th><th>Transaction</th><th>Amount</th><th>Balance after</th></tr></thead><PaginatedRows rows={transactions} colSpan={5} renderRow={(transaction) => <tr key={`${transaction.accountNumber}-${transaction._id}`}><td>{new Date(transaction.createdAt).toLocaleString()}</td><td>{transaction.accountName}<br /><small>{transaction.accountNumber}</small></td><td>{transaction.description || transaction.type.replaceAll('_', ' ')}</td><td className={['deposit', 'transfer_in', 'loan_disbursement'].includes(transaction.type) ? 'financial-positive' : 'financial-negative'}>{['deposit', 'transfer_in', 'loan_disbursement'].includes(transaction.type) ? '+' : '-'}{currency(transaction.amount)}</td><td>{currency(transaction.balanceAfter)}</td></tr>} /></table></div> : <p className="empty-state">Your account activity will appear here.</p>}</section>
+    <section className="bank-panel loans-panel" id="customer-applications"><div className="bank-panel-heading"><div><span className="eyebrow">APPLICATION TRACKER</span><h2>Your loan requests</h2></div><Clock3 size={22} /></div>{latestApplications.length ? <div className="loan-list">{latestApplications.map((application) => <article className="customer-loan-row" key={application._id}><div className="customer-loan-summary"><strong><LoanMoney amount={application.amount} /> · {application.bankName}</strong><small>{application.purpose} · {application.branchName} · {application.termMonths} months</small>{application.annualInterestRate !== undefined && <small>{application.annualInterestRate}% annual interest · {currency(application.monthlyPayment)} estimated monthly payment</small>}<small>Outstanding principal: {currency(application.outstandingPrincipal)} · {currency(application.interestIncome)} interest paid</small></div><span className={`loan-status ${application.status}`}>{application.status}</span>{application.status === 'approved' && <CustomerLoanRepayment application={application} onPay={onVirtualLoanPayment} />}{application.repayments?.length > 0 && <div className="customer-payment-receipts">{application.repayments.slice(-3).reverse().map((item, index) => <div key={`${application._id}-receipt-${index}`}><strong>{currency(item.amount)} · {new Date(item.paidAt).toLocaleDateString()}</strong><small>{item.receiptNumber ? `Receipt ${item.receiptNumber} · ` : ''}{item.paymentMode === 'virtual_simulation' ? 'Virtual simulation' : 'Recorded repayment'}{item.paymentChannel ? ` · ${item.paymentChannel.replaceAll('_', ' ')}` : ''}</small></div>)}</div>}</article>)}</div> : <p className="empty-state">You have not applied for a loan yet.</p>}</section>
   </>;
+}
+
+function CustomerLoanRepayment({ application, onPay }) {
+  const [amount, setAmount] = useState(String(application.monthlyPayment || ''));
+  const [channel, setChannel] = useState('mtn_mobile_money');
+  const [simulateFailure, setSimulateFailure] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState({ type: '', text: '' });
+  const requestKey = useRef(null);
+
+  async function submit(event) {
+    event.preventDefault();
+    setSubmitting(true);
+    setNotice({ type: '', text: '' });
+    const signature = `${amount}:${channel}:${simulateFailure}`;
+    if (requestKey.current?.signature !== signature) {
+      requestKey.current = { signature, key: window.crypto.randomUUID() };
+    }
+    try {
+      const payment = await onPay(application._id, {
+        amount: Number(amount),
+        channel,
+        simulateFailure,
+        idempotencyKey: requestKey.current.key
+      });
+      if (!payment) {
+        setNotice({ type: 'error', text: 'Payment was not confirmed. No loan repayment was recorded.' });
+        return;
+      }
+      requestKey.current = null;
+      setNotice({
+        type: 'success',
+        text: payment.status === 'succeeded'
+          ? `Simulation succeeded. Receipt: ${payment.receiptNumber}. No real funds moved.`
+          : `Simulation declined. Reference: ${payment.reference}. No repayment was recorded.`
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return <form className="customer-repayment-form" onSubmit={submit}>
+    <div><label>Repayment amount (RWF)<input type="number" min="1" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} required /></label><label>Virtual payment method<select value={channel} onChange={(event) => setChannel(event.target.value)}><option value="mtn_mobile_money">MTN Mobile Money (simulation)</option><option value="airtel_mobile_money">Airtel Money (simulation)</option><option value="bank_transfer">Bank transfer (simulation)</option><option value="virtual_account">Virtual account (simulation)</option></select></label></div>
+    <label className="check-row"><input type="checkbox" checked={simulateFailure} onChange={(event) => setSimulateFailure(event.target.checked)} /> Simulate a declined payment (test only)</label>
+    {notice.text && <Notice notice={notice} />}
+    <p className="form-disclaimer">Demo only: a successful test updates the loan ledger and issues a receipt. It does not debit an account or transfer real money.</p>
+    <button className="bank-button" type="submit" disabled={submitting}>{submitting ? 'Simulating…' : 'Make virtual repayment'}</button>
+  </form>;
 }
 
 function BankStaffDashboard({ banks, token, profile, canManageAccounts = false, onActivity }) {
   const [accounts, setAccounts] = useState([]);
+  const isBankAdmin = profile.staffRole === 'bank_admin';
   const [selectedBankId, setSelectedBankId] = useState(String(profile.bankId?._id || profile.bankId || ''));
-  const [selectedBranchId, setSelectedBranchId] = useState(String(profile.branchId?._id || profile.branchId || ''));
+  const [selectedBranchId, setSelectedBranchId] = useState(isBankAdmin ? '' : String(profile.branchId?._id || profile.branchId || ''));
   const [loadError, setLoadError] = useState('');
   const selectedBank = banks.find((bank) => String(bank._id) === selectedBankId);
 
@@ -1532,18 +1962,18 @@ function BankStaffDashboard({ banks, token, profile, canManageAccounts = false, 
     }
     if (!banks.some((bank) => String(bank._id) === selectedBankId)) {
       setSelectedBankId(String(banks[0]._id));
-      setSelectedBranchId(String(banks[0].branches?.[0]?._id || ''));
+      setSelectedBranchId(isBankAdmin ? '' : String(banks[0].branches?.[0]?._id || ''));
     }
-  }, [banks, selectedBankId]);
+  }, [banks, selectedBankId, isBankAdmin]);
 
   useEffect(() => {
-    if (!token || !selectedBankId || !selectedBranchId) {
+    if (!token || !selectedBankId || (!isBankAdmin && !selectedBranchId)) {
       setAccounts([]);
       return;
     }
     let active = true;
     setLoadError('');
-    getBankAccounts(token, { bankId: selectedBankId, branchId: selectedBranchId })
+    getBankAccounts(token, { bankId: selectedBankId, ...(selectedBranchId ? { branchId: selectedBranchId } : {}) })
       .then(({ accounts: loadedAccounts }) => { if (active) setAccounts(loadedAccounts || []); })
       .catch((error) => {
         if (!active) return;
@@ -1551,13 +1981,13 @@ function BankStaffDashboard({ banks, token, profile, canManageAccounts = false, 
         setLoadError(error.message);
       });
     return () => { active = false; };
-  }, [selectedBankId, selectedBranchId, token]);
+  }, [selectedBankId, selectedBranchId, token, isBankAdmin]);
 
   return <><section className="panel bank-accounts-panel"><PanelHeading eyebrow="BANK STAFF DASHBOARD" title="Bank account ledger" icon={<Building2 size={22} />} />
-    <div className="directory-toolbar"><label>Bank<select value={selectedBankId} onChange={(event) => { const bank = banks.find((item) => String(item._id) === event.target.value); setSelectedBankId(event.target.value); setSelectedBranchId(String(bank?.branches?.[0]?._id || '')); }} disabled={!banks.length}><option value="">{banks.length ? 'Select bank' : 'No bank assigned'}</option>{banks.map((bank) => <option key={bank._id} value={bank._id}>{bank.bankName}</option>)}</select></label><label>Sub-branch<select value={selectedBranchId} onChange={(event) => setSelectedBranchId(event.target.value)} disabled={!selectedBank?.branches?.length}><option value="">Select sub-branch</option>{selectedBank?.branches?.map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName}</option>)}</select></label></div>
+    <div className="directory-toolbar"><label>Bank<select value={selectedBankId} onChange={(event) => { const bank = banks.find((item) => String(item._id) === event.target.value); setSelectedBankId(event.target.value); setSelectedBranchId(isBankAdmin ? '' : String(bank?.branches?.[0]?._id || '')); }} disabled={!banks.length}><option value="">{banks.length ? 'Select bank' : 'No bank assigned'}</option>{banks.map((bank) => <option key={bank._id} value={bank._id}>{bank.bankName}</option>)}</select></label><label>Sub-branch<select value={selectedBranchId} onChange={(event) => setSelectedBranchId(event.target.value)} disabled={!selectedBank?.branches?.length}><option value="">{isBankAdmin ? 'All sub-branches' : 'Select sub-branch'}</option>{selectedBank?.branches?.map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName}</option>)}</select></label></div>
     {!banks.length && <p className="empty-state">No bank is assigned to this Accounts Manager account. Ask the System Admin to assign a bank and sub-branch.</p>}
     {loadError && <p className="notice error" role="alert">{loadError}</p>}
-  </section>{selectedBankId && selectedBranchId && <BankAccountManagementTable accounts={accounts} setAccounts={setAccounts} token={token} banks={banks} canManageAccounts={canManageAccounts} onActivity={onActivity} />}</>;
+  </section>{selectedBankId && (isBankAdmin || selectedBranchId) && <BankAccountManagementTable accounts={accounts} setAccounts={setAccounts} token={token} banks={banks} canManageAccounts={canManageAccounts} onActivity={onActivity} />}</>;
 }
 
 function ProfileDashboard({ profile, form, loading, notice, setForm, onSave }) { return <div className="dashboard-grid role-grid"><section className="panel profile-panel"><PanelHeading eyebrow="PERSONAL DETAILS" title="My profile" icon={<UserRound size={22} />} /><form onSubmit={onSave} className="form-stack"><Field icon={<UserRound size={17} />} name="name" placeholder="Full name" value={form.name || profile.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /><Field icon={<AtSign size={17} />} name="email" type="email" placeholder="Email address" value={form.email || profile.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /><Field icon={<LockKeyhole size={17} />} name="password" type="password" placeholder="New password (optional)" value={form.password || ''} onChange={(event) => setForm({ ...form, password: event.target.value })} minLength={8} />{notice.text && <Notice notice={notice} />}<button className="primary-button" disabled={loading}>Save changes <Check size={17} /></button></form></section><section className="panel account-card"><PanelHeading eyebrow="ACCOUNT SNAPSHOT" title="Your details" icon={<ShieldCheck size={22} />} /><div className="account-summary"><div className="large-avatar">{profile.name?.charAt(0).toUpperCase()}</div><strong>{profile.name}</strong><span>{profile.email}</span><span className="verified-label"><Check size={14} /> Verified account</span></div></section></div>; }

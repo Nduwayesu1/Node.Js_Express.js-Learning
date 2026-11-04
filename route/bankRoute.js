@@ -72,7 +72,8 @@ router.get('/banks/available', requireAuth, bankController.listAvailableBanks);
  * @swagger
  * /api/banks/assigned:
  *   get:
- *     summary: Return the authenticated bank employee's assigned bank and sub-branch
+ *     summary: Return the authenticated employee's assigned bank scope
+ *     description: Bank Admins receive every sub-branch in their bank; other employee roles receive only their assigned sub-branch.
  *     tags: [Banks]
  *     security:
  *       - bearerAuth: []
@@ -179,7 +180,7 @@ router.post('/banks/:bankId/branches', requireAuth, requireAdmin, bankController
  * /api/bank-accounts:
  *   get:
  *     summary: List bank accounts visible to the authenticated user
- *     description: Customers see their accounts; employees see assigned sub-branch accounts; admins can filter by bank and sub-branch.
+ *     description: Customers see their accounts; Bank Admins can view accounts across their bank; other employees see assigned sub-branch accounts; system administrators can filter by bank and sub-branch.
  *     tags: [Bank Accounts]
  *     security:
  *       - bearerAuth: []

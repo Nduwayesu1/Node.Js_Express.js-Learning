@@ -118,6 +118,42 @@ router.post('/loans/:loanId/repayments', requireAuth, loanController.recordRepay
 
 /**
  * @swagger
+ * /api/loans/{loanId}/virtual-payments:
+ *   post:
+ *     summary: Simulate a customer loan repayment
+ *     description: Test-only virtual payment processing. A successful simulation updates the loan ledger and issues a receipt but moves no real funds and does not debit a bank or mobile-money account.
+ *     tags: [Loans]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: loanId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [amount, channel, idempotencyKey]
+ *             properties:
+ *               amount: { type: integer, minimum: 1, example: 5000 }
+ *               channel: { type: string, enum: [mtn_mobile_money, airtel_mobile_money, bank_transfer, virtual_account] }
+ *               idempotencyKey: { type: string, format: uuid }
+ *               simulateFailure: { type: boolean, default: false }
+ *     responses:
+ *       200: { description: Virtual payment succeeded; receipt and updated loan returned }
+ *       400: { description: Invalid payment or repayment exceeds the balance due }
+ *       402: { description: Virtual payment declined by the simulator }
+ *       403: { description: Authenticated user is not the loan applicant }
+ *       409: { description: Payment request key conflict or loan is not approved }
+ *       503: { description: Payment simulator is unavailable or not configured }
+ */
+router.post('/loans/:loanId/virtual-payments', requireAuth, loanController.payLoanWithVirtualSimulator);
+
+/**
+ * @swagger
  * /api/loans/{loanId}/default:
  *   patch:
  *     summary: Mark an approved loan as defaulted

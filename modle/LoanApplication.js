@@ -6,6 +6,10 @@ const repaymentSchema = new Schema({
     interestPortion: { type: Number, required: true, min: 0, validate: Number.isSafeInteger },
     principalPortion: { type: Number, required: true, min: 0, validate: Number.isSafeInteger },
     recordedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    paymentReference: { type: String, trim: true },
+    receiptNumber: { type: String, trim: true },
+    paymentChannel: { type: String, trim: true },
+    paymentMode: { type: String, enum: ['staff_recorded', 'virtual_simulation'], default: 'staff_recorded' },
     paidAt: { type: Date, required: true, default: Date.now }
 }, { _id: false });
 

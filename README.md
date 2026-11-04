@@ -6,7 +6,9 @@ The interactive Swagger UI is available at `/api-docs` and the generated OpenAPI
 
 ## Bank administrators and members
 
-Public self-signup is disabled. The global administrator registers a Bank Admin with a bank and sub-branch assignment. The Bank Admin can register customer members in their assigned sub-branch, view the bank-wide employee and customer-member directories, approve/activate or deactivate any customer member in that bank, and activate or deactivate other bank employees. Activating a pending employee verifies the account and clears its OTP so the employee can sign in; deactivated employees are blocked from login and authenticated API access. Finance Managers have view-only access to the same bank-wide directory. Data queries and status changes are scoped to the authenticated employee's bank; the client cannot choose another bank. OTP email verification remains enabled for accounts that have not been approved by their Bank Admin.
+Public self-signup is disabled. The System Admin creates each Bank Admin and assigns the employee to a bank, without a sub-branch assignment. The Bank Admin has bank-wide scope: they create Sub-branch Managers and other employees, assign each to a sub-branch, register members in a selected sub-branch, manage bank-wide member and employee access, and view accounts and loan applications across all of their bank's sub-branches. Sub-branch Managers are created by the Bank Admin and remain limited to their assigned branch. Finance Managers have view-only access to the bank-wide employee and customer-member directory. Data queries and status changes are scoped to the authenticated employee's bank; the client cannot choose another bank. OTP email verification remains enabled for accounts that have not been approved by their Bank Admin.
+
+Existing employee accounts created under the earlier combined “Branch Manager / Bank Admin” role should be reviewed by the System Admin and assigned the `bank_admin` role if they are intended to administer the whole bank. Other employee roles must have a sub-branch assignment.
 
 Every bank has a unique 12-digit bank account number. Each sub-branch is assigned a unique branch code derived from the bank number; both identifiers are shown in bank and branch selection controls.
 
@@ -26,19 +28,34 @@ Branch address options are fetched from the CORS-enabled Rwanda Administrative D
 
 Repayments are recorded in whole RWF amounts. Accrued interest is calculated daily on the outstanding principal using a 365.25-day year, allocated before principal, and unpaid interest carries forward. Interest income counts only interest collected. Marking an approved loan as defaulted records its remaining principal as a loss. Reported net profit is collected interest income minus principal losses; it excludes operating expenses, funding costs, and tax.
 
-Loan applications, decisions, repayments, and defaults are stored in MongoDB and limited to the applicant, administrators, or employees assigned to the loan's bank sub-branch.
+Customers can test loan repayments using the isolated Python FastAPI service in `payment-service/`. Start it with `uvicorn main:app --app-dir payment-service --host 127.0.0.1 --port 8000` after installing `payment-service/requirements.txt`, and set the same high-entropy `PAYMENT_SIMULATOR_API_KEY` on the Python service and Node backend. The backend's `PAYMENT_SIMULATOR_URL` defaults to `http://127.0.0.1:8000`. Virtual channels include MTN Mobile Money, Airtel Money, bank transfer, and virtual account. The customer may explicitly simulate a decline for testing.
+
+**The virtual simulator is not a payment provider.** A simulated success updates only the loan repayment ledger and issues a `VIRT-` reference/receipt; it does not debit an account or move money. Do not connect this simulator to production payment flows or treat its receipts as proof of funds. Use an authorized provider integration before accepting real payments.
+
+Loan applications, decisions, repayments, and defaults are stored in MongoDB and limited to the applicant, administrators, Bank Admins for their bank, or employees assigned to the loan's sub-branch.
 
 The System Admin can view and filter bank accounts and deposit history across every bank and sub-branch, inspect bank profiles and staff, and manage user roles and bank assignments. Employee accounts are assigned a bank and sub-branch. Each bank role has a scoped dashboard:
 
-- Branch Manager / Bank Admin: register branch members, approve/activate or deactivate bank-wide customer members, view bank-wide employees, create branch staff, review loan applications, and inspect member accounts in their assigned sub-branch.
+- Bank Admin: bank-wide member and employee administration, create and assign Sub-branch Managers and other staff, review loans across all sub-branches, and inspect the bank's customer accounts.
+- Sub-branch Manager: register and manage members and review loan applications within the assigned sub-branch.
 - General Manager / CEO: read-only branch overview and loan reports.
 - HR Manager: bank-wide employee and customer-member directory.
 - Finance Manager: bank-wide employee and customer-member directory (view-only) and payroll for verified staff in the assigned sub-branch.
 - Accounts Manager: assigned sub-branch account ledger and account activation controls.
 
-Branch Managers and Accounts Managers can view member bank-account details for their assigned sub-branch; account activation controls remain limited to Accounts Managers. Customer dashboards provide account and balance information, transfers, deposits, loan applications and tracking, transaction history, and profile management. Role permissions are checked by the backend as well as hidden or shown in the frontend. Member directories and member status actions are bank-scoped; staff creation, payroll, and account controls remain restricted to their existing assigned sub-branch permissions. Only the System Admin can inspect data across all banks.
+Bank Admins can view customer bank-account details across their bank; Sub-branch Managers and Accounts Managers are limited to their assigned sub-branch. Account activation controls remain limited to Accounts Managers. Customer dashboards provide account and balance information, transfers, deposits, loan applications and tracking, transaction history, and profile management. Role permissions are checked by the backend as well as hidden or shown in the frontend. Member directories and member status actions are scoped to the employee's bank or sub-branch; payroll and account controls retain their assigned sub-branch permissions. Only the System Admin can inspect data across all banks.
 
 The notification bell records successful application activity (such as registrations, approvals, account changes, payroll batches, and loan actions) in the browser's activity history. Selecting "View all" opens the complete saved activity list; request errors remain in their normal error messages and are not added as notifications.
+
+Bank reports summarize employee and member counts/status, account balances, deposit totals, loan status and financial performance, and queued payroll totals. Large bank, customer, account, deposit, loan, employee, and payroll lists are paginated in the dashboard.
+
+## HR dashboard
+
+HR Managers have a bank-wide, view-only workforce dashboard with staff counts by role and sub-branch, active/pending/deactivated account counts, searchable and filterable employee records, account status, and account creation date. It does not infer employment dates, salary, attendance, or contract status because the current employee records do not contain those fields. Bank Admins remain responsible for staff access and branch assignments.
+
+## Guest demo and feedback
+
+Visitors may continue as Guest to view a read-only dashboard containing clearly labeled fictional sample metrics and charts. It does not load live bank or customer data and offers no account or transaction actions. Guests may submit anonymous feedback (category, 1–5 rating, and message); the form does not collect a name or email, limits the message to 2,000 characters, and is rate-limited to five submissions per IP per 15 minutes. System Admins can view the latest feedback and mark submissions reviewed.
 
 ## Mobile-money deposits
 

@@ -2,8 +2,10 @@ const mongoose = require('mongoose');
 const Bank = require('../modle/Bank');
 const BankAccount = require('../modle/BankAccount');
 const LoanApplication = require('../modle/LoanApplication');
+const LoanPaymentAttempt = require('../modle/LoanPaymentAttempt');
 const User = require('../modle/User');
 const { getSystemAnnualInterestRate, calculateLoanTerms, calculateAccruedInterest, allocateRepayment, applyLoanDisbursement } = require('../utils/loanCalculations');
+const { requestVirtualPayment } = require('../utils/virtualPaymentClient');
 
 async function listLoans(req, res) {
     try {
@@ -12,11 +14,13 @@ async function listLoans(req, res) {
             filter = { applicant: req.user.id };
         } else if (req.user.role === 'employee') {
             const employee = await User.findById(req.user.id).select('bankId branchId staffRole');
-            if (!['branch_manager', 'general_manager'].includes(employee?.staffRole || 'branch_manager')) {
+            if (!['bank_admin', 'branch_manager', 'general_manager'].includes(employee?.staffRole || 'branch_manager')) {
                 return res.status(403).json({ message: 'Loan reports are not available for your bank staff role' });
             }
-            if (!employee?.bankId || !employee?.branchId) return res.status(200).json({ loans: [] });
-            filter = { bank: employee.bankId, branchId: employee.branchId };
+            if (!employee?.bankId || (employee.staffRole !== 'bank_admin' && !employee.branchId)) return res.status(200).json({ loans: [] });
+            filter = employee.staffRole === 'bank_admin'
+                ? { bank: employee.bankId }
+                : { bank: employee.bankId, branchId: employee.branchId };
         } else if (req.user.role !== 'admin') {
             return res.status(403).json({ message: 'Loan access is not available for this account' });
         }
@@ -103,9 +107,9 @@ async function canManageLoan(req, loan) {
     if (req.user.role === 'admin') return true;
     if (req.user.role !== 'employee') return false;
     const employee = await User.findById(req.user.id).select('bankId branchId staffRole');
+    if (employee?.staffRole === 'bank_admin') return Boolean(employee.bankId?.equals(loan.bank));
     return Boolean((employee?.staffRole || 'branch_manager') === 'branch_manager'
-        && employee.bankId?.equals(loan.bank)
-        && employee.branchId?.equals(loan.branchId));
+        && employee.bankId?.equals(loan.bank) && employee.branchId?.equals(loan.branchId));
 }
 
 async function decideLoan(req, res) {
@@ -216,6 +220,202 @@ async function recordRepayment(req, res) {
     }
 }
 
+function paymentAttemptMatches(attempt, { loanId, amount, channel }) {
+    return String(attempt.loan) === String(loanId)
+        && attempt.amount === amount
+        && attempt.channel === channel;
+}
+
+function respondWithPaymentAttempt(res, attempt, loan) {
+    const succeeded = attempt.status === 'succeeded';
+    return res.status(succeeded ? 200 : 402).json({
+        message: succeeded ? 'Virtual repayment processed successfully' : 'Virtual payment was declined by the simulator',
+        payment: {
+            status: attempt.status,
+            mode: 'simulation',
+            amount: attempt.amount,
+            currency: attempt.currency,
+            channel: attempt.channel,
+            reference: attempt.reference,
+            receiptNumber: attempt.receiptNumber,
+            processedAt: attempt.processedAt
+        },
+        ...(loan ? { loan } : {})
+    });
+}
+
+async function payLoanWithVirtualSimulator(req, res) {
+    const { amount, channel, idempotencyKey, simulateFailure = false } = req.body;
+    const allowedChannels = ['mtn_mobile_money', 'airtel_mobile_money', 'bank_transfer', 'virtual_account'];
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+        return res.status(400).json({ message: 'Enter a positive whole-number RWF repayment' });
+    }
+    if (!allowedChannels.includes(channel)) {
+        return res.status(400).json({ message: 'Choose a supported virtual payment channel' });
+    }
+    if (!/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(idempotencyKey || '')) {
+        return res.status(400).json({ message: 'A valid payment request key is required' });
+    }
+    if (typeof simulateFailure !== 'boolean') {
+        return res.status(400).json({ message: 'Simulation outcome must be a boolean' });
+    }
+    if (req.user.role !== 'user') {
+        return res.status(403).json({ message: 'Only customers can make virtual loan repayments' });
+    }
+
+    const attemptQuery = { applicant: req.user.id, idempotencyKey };
+    const attemptInput = { loanId: req.params.loanId, amount, channel };
+    try {
+        const previousAttempt = await LoanPaymentAttempt.findOne(attemptQuery);
+        if (previousAttempt) {
+            if (!paymentAttemptMatches(previousAttempt, attemptInput)) {
+                return res.status(409).json({ message: 'This payment request key was already used for a different payment' });
+            }
+            const loan = await LoanApplication.findOne({ _id: previousAttempt.loan, applicant: req.user.id });
+            return respondWithPaymentAttempt(res, previousAttempt, loan);
+        }
+
+        const loan = await LoanApplication.findOne({ _id: req.params.loanId, applicant: req.user.id });
+        if (!loan) return res.status(404).json({ message: 'Loan application not found' });
+        if (loan.status !== 'approved') {
+            return res.status(409).json({ message: 'Only approved loans can receive repayments' });
+        }
+
+        const paidAt = new Date();
+        const interestDue = loan.unpaidInterest + calculateAccruedInterest(
+            loan.outstandingPrincipal,
+            loan.annualInterestRate,
+            loan.lastPaymentAt || loan.approvedAt,
+            paidAt
+        );
+        allocateRepayment(amount, loan.outstandingPrincipal, interestDue);
+
+        let simulatedPayment;
+        try {
+            simulatedPayment = await requestVirtualPayment({
+                amount,
+                currency: 'RWF',
+                channel,
+                idempotency_key: idempotencyKey,
+                simulate_failure: simulateFailure
+            });
+        } catch (error) {
+            return res.status(error.status || 503).json({ message: error.message });
+        }
+
+        if (simulatedPayment.status === 'failed') {
+            let failedAttempt;
+            try {
+                [failedAttempt] = await LoanPaymentAttempt.create([{
+                    applicant: req.user.id,
+                    loan: loan._id,
+                    idempotencyKey,
+                    reference: simulatedPayment.reference,
+                    receiptNumber: simulatedPayment.receipt_number,
+                    amount,
+                    currency: 'RWF',
+                    channel,
+                    status: 'failed',
+                    processedAt: new Date(simulatedPayment.processed_at)
+                }]);
+            } catch (error) {
+                if (error.code !== 11000) throw error;
+                failedAttempt = await LoanPaymentAttempt.findOne(attemptQuery);
+                if (!failedAttempt || !paymentAttemptMatches(failedAttempt, attemptInput)) {
+                    return res.status(409).json({ message: 'This payment request key was already used for a different payment' });
+                }
+            }
+            return respondWithPaymentAttempt(res, failedAttempt);
+        }
+
+        const session = await mongoose.startSession();
+        let completedAttempt;
+        let updatedLoan;
+        try {
+            await session.withTransaction(async () => {
+                const existingAttempt = await LoanPaymentAttempt.findOne(attemptQuery).session(session);
+                if (existingAttempt) {
+                    if (!paymentAttemptMatches(existingAttempt, attemptInput)) {
+                        throw Object.assign(new Error('This payment request key was already used for a different payment'), { status: 409 });
+                    }
+                    completedAttempt = existingAttempt;
+                    updatedLoan = await LoanApplication.findOne({ _id: existingAttempt.loan, applicant: req.user.id }).session(session);
+                    return;
+                }
+
+                const currentLoan = await LoanApplication.findOne({ _id: req.params.loanId, applicant: req.user.id }).session(session);
+                if (!currentLoan) throw Object.assign(new Error('Loan application not found'), { status: 404 });
+                if (currentLoan.status !== 'approved') {
+                    throw Object.assign(new Error('Only approved loans can receive repayments'), { status: 409 });
+                }
+
+                const transactionTime = new Date();
+                const accruedInterest = currentLoan.unpaidInterest + calculateAccruedInterest(
+                    currentLoan.outstandingPrincipal,
+                    currentLoan.annualInterestRate,
+                    currentLoan.lastPaymentAt || currentLoan.approvedAt,
+                    transactionTime
+                );
+                const allocation = allocateRepayment(amount, currentLoan.outstandingPrincipal, accruedInterest);
+                [completedAttempt] = await LoanPaymentAttempt.create([{
+                    applicant: req.user.id,
+                    loan: currentLoan._id,
+                    idempotencyKey,
+                    reference: simulatedPayment.reference,
+                    receiptNumber: simulatedPayment.receipt_number,
+                    amount,
+                    currency: 'RWF',
+                    channel,
+                    status: 'succeeded',
+                    processedAt: transactionTime
+                }], { session });
+
+                currentLoan.repayments.push({
+                    amount,
+                    interestPortion: allocation.interestPortion,
+                    principalPortion: allocation.principalPortion,
+                    recordedBy: req.user.id,
+                    paymentReference: simulatedPayment.reference,
+                    receiptNumber: simulatedPayment.receipt_number,
+                    paymentChannel: channel,
+                    paymentMode: 'virtual_simulation',
+                    paidAt: transactionTime
+                });
+                currentLoan.interestIncome += allocation.interestPortion;
+                currentLoan.principalRecovered += allocation.principalPortion;
+                currentLoan.outstandingPrincipal = allocation.remainingPrincipal;
+                currentLoan.unpaidInterest = allocation.remainingInterest;
+                currentLoan.lastPaymentAt = transactionTime;
+                if (currentLoan.outstandingPrincipal === 0) currentLoan.status = 'repaid';
+                await currentLoan.save({ session });
+                updatedLoan = currentLoan;
+            });
+        } catch (error) {
+            if (error.code === 11000) {
+                completedAttempt = await LoanPaymentAttempt.findOne(attemptQuery);
+                if (completedAttempt && paymentAttemptMatches(completedAttempt, attemptInput)) {
+                    updatedLoan = await LoanApplication.findOne({ _id: completedAttempt.loan, applicant: req.user.id });
+                } else {
+                    return res.status(409).json({ message: 'This payment request key was already used for a different payment' });
+                }
+            } else if (error.status) {
+                return res.status(error.status).json({ message: error.message });
+            } else {
+                throw error;
+            }
+        } finally {
+            await session.endSession();
+        }
+        return respondWithPaymentAttempt(res, completedAttempt, updatedLoan);
+    } catch (error) {
+        if (error.message === 'Repayment exceeds the current balance due') {
+            return res.status(400).json({ message: error.message });
+        }
+        console.error('Virtual loan payment failed:', error.message);
+        return res.status(500).json({ message: 'Unable to process virtual loan repayment' });
+    }
+}
+
 async function markLoanDefaulted(req, res) {
     try {
         const loan = await LoanApplication.findById(req.params.loanId);
@@ -235,4 +435,4 @@ async function markLoanDefaulted(req, res) {
     }
 }
 
-module.exports = { listLoans, createLoan, decideLoan, recordRepayment, markLoanDefaulted };
+module.exports = { listLoans, createLoan, decideLoan, recordRepayment, payLoanWithVirtualSimulator, markLoanDefaulted };
