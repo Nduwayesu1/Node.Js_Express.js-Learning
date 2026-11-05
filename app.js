@@ -11,6 +11,7 @@ const guestFeedbackRoutes = require('./route/guestFeedbackRoute');
 const attendanceRoutes = require('./route/attendanceRoute');
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 const configuredOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean)

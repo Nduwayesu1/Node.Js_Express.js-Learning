@@ -10,9 +10,10 @@ const attendanceSchema = new Schema({
     checkInAt: { type: Date, required: true, default: Date.now },
     status: { type: String, enum: ['present'], required: true, default: 'present' },
     photoConsentAt: { type: Date, required: true },
-    photoCiphertext: { type: Buffer, required: true, select: false },
-    photoIv: { type: Buffer, required: true, select: false },
-    photoAuthTag: { type: Buffer, required: true, select: false }
+    photoPublicId: { type: String, select: false },
+    photoCiphertext: { type: Buffer, select: false },
+    photoIv: { type: Buffer, select: false },
+    photoAuthTag: { type: Buffer, select: false }
 }, { timestamps: true });
 
 attendanceSchema.index({ employee: 1, dayKey: 1 }, { unique: true });

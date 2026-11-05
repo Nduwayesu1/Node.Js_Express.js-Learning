@@ -16,8 +16,8 @@ const checkInLimiter = rateLimit({
  * @swagger
  * /api/attendance/check-in:
  *   post:
- *     summary: Record employee attendance with a consented, encrypted selfie
- *     description: Stores the JPEG attendance photo encrypted at rest. The system does not use facial recognition or identity matching.
+ *     summary: Record employee attendance with a consented selfie
+ *     description: Stores the JPEG in authenticated Cloudinary storage and serves it only through the bank-scoped HR endpoint. The system does not use facial recognition or identity matching.
  *     tags: [Attendance]
  *     security:
  *       - bearerAuth: []
@@ -36,7 +36,7 @@ const checkInLimiter = rateLimit({
  *       400: { description: Consent missing or selfie invalid }
  *       403: { description: Active employee access required }
  *       409: { description: Attendance already recorded today }
- *       503: { description: Encrypted photo storage is not configured }
+ *       503: { description: Cloudinary photo storage is not configured or available }
  */
 router.post('/attendance/check-in', requireAuth, checkInLimiter, attendanceController.checkIn);
 
@@ -72,7 +72,7 @@ router.get('/attendance/hr', requireAuth, requireStaffRole('hr_manager'), attend
  * @swagger
  * /api/attendance/{attendanceId}/photo:
  *   get:
- *     summary: Retrieve an encrypted attendance selfie for HR review
+ *     summary: Retrieve an attendance selfie for HR review
  *     tags: [Attendance]
  *     security:
  *       - bearerAuth: []
@@ -82,7 +82,7 @@ router.get('/attendance/hr', requireAuth, requireStaffRole('hr_manager'), attend
  *         required: true
  *         schema: { type: string }
  *     responses:
- *       200: { description: JPEG photo; private and non-cacheable }
+ *       200: { description: JPEG photo; retrieved from authenticated Cloudinary storage, private and non-cacheable }
  *       403: { description: HR Manager access required }
  *       404: { description: Attendance record not found in the HR Manager's bank }
  */
