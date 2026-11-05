@@ -42,6 +42,22 @@ router.post('/attendance/check-in', requireAuth, checkInLimiter, attendanceContr
 
 /**
  * @swagger
+ * /api/attendance/check-out:
+ *   post:
+ *     summary: Record the authenticated employee's check-out for today
+ *     tags: [Attendance]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200: { description: Attendance check-out recorded }
+ *       403: { description: Employee access required }
+ *       404: { description: No check-in exists for today }
+ *       409: { description: Attendance was already checked out }
+ */
+router.post('/attendance/check-out', requireAuth, checkInLimiter, attendanceController.checkOut);
+
+/**
+ * @swagger
  * /api/attendance/mine:
  *   get:
  *     summary: List the authenticated employee's attendance history

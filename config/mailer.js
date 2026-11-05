@@ -1,9 +1,12 @@
 const smtpHost = process.env.SMTP_HOST?.trim();
 const smtpUser = process.env.SMTP_USER?.trim();
-const smtpPass = process.env.SMTP_PASS?.trim();
-const smtpFrom = process.env.SMTP_FROM?.trim() || smtpUser;
+const smtpPassValue = process.env.SMTP_PASS?.trim();
+const smtpPass = smtpHost?.toLowerCase() === 'smtp.gmail.com'
+    ? smtpPassValue?.replace(/\s/g, '')
+    : smtpPassValue;
 const smtpPort = Number.parseInt(process.env.SMTP_PORT?.trim() || '587', 10);
-const smtpSecure = process.env.SMTP_SECURE?.trim().toLowerCase() === 'true';
+const smtpSecure = process.env.SMTP_SECURE?.trim().toLowerCase() === 'true' || smtpPort === 465;
+const smtpFrom = process.env.SMTP_FROM?.trim() || smtpUser;
 const hasSmtpConfig = smtpHost && smtpUser && smtpPass;
 
 const transporter = hasSmtpConfig

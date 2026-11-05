@@ -8,6 +8,8 @@ const User = require('../modle/User');
 const { getSystemAnnualInterestRate, calculateLoanTerms, calculateAccruedInterest, allocateRepayment, applyLoanDisbursement } = require('../utils/loanCalculations');
 const { requestVirtualPayment } = require('../utils/virtualPaymentClient');
 
+const STAFF_REPAYMENT_CHANNELS = new Set(['cash', 'mobile_money', 'bank_transfer']);
+
 async function listLoans(req, res) {
     try {
         let filter = {};
@@ -15,13 +17,15 @@ async function listLoans(req, res) {
             filter = { applicant: req.user.id };
         } else if (req.user.role === 'employee') {
             const employee = await User.findById(req.user.id).select('bankId branchId staffRole');
-            if (!['bank_admin', 'branch_manager', 'general_manager'].includes(employee?.staffRole || 'branch_manager')) {
-                return res.status(403).json({ message: 'Loan reports are not available for your bank staff role' });
+            const filters = [{ applicant: req.user.id }];
+            const staffRole = employee?.staffRole;
+            if (['bank_admin', 'branch_manager', 'general_manager'].includes(staffRole)
+                && employee?.bankId && (staffRole === 'bank_admin' || employee.branchId)) {
+                filters.push(staffRole === 'bank_admin'
+                    ? { bank: employee.bankId }
+                    : { bank: employee.bankId, branchId: employee.branchId });
             }
-            if (!employee?.bankId || (employee.staffRole !== 'bank_admin' && !employee.branchId)) return res.status(200).json({ loans: [] });
-            filter = employee.staffRole === 'bank_admin'
-                ? { bank: employee.bankId }
-                : { bank: employee.bankId, branchId: employee.branchId };
+            filter = { $or: filters };
         } else if (req.user.role !== 'admin') {
             return res.status(403).json({ message: 'Loan access is not available for this account' });
         }
@@ -109,8 +113,15 @@ async function canManageLoan(req, loan) {
     if (req.user.role !== 'employee') return false;
     const employee = await User.findById(req.user.id).select('bankId branchId staffRole');
     if (employee?.staffRole === 'bank_admin') return Boolean(employee.bankId?.equals(loan.bank));
-    return Boolean((employee?.staffRole || 'branch_manager') === 'branch_manager'
+    return Boolean(employee?.staffRole === 'branch_manager'
         && employee.bankId?.equals(loan.bank) && employee.branchId?.equals(loan.branchId));
+}
+
+function validateStaffRepaymentInput({ amount, paymentChannel, confirmed }) {
+    if (!Number.isSafeInteger(amount) || amount <= 0) return 'Enter a positive whole-number RWF repayment';
+    if (!STAFF_REPAYMENT_CHANNELS.has(paymentChannel)) return 'Choose a valid payment method';
+    if (confirmed !== true) return 'Confirm that the customer payment has already been received';
+    return null;
 }
 
 async function decideLoan(req, res) {
@@ -193,8 +204,9 @@ async function decideLoan(req, res) {
 }
 
 async function recordRepayment(req, res) {
-    const { amount } = req.body;
-    if (!Number.isSafeInteger(amount) || amount <= 0) return res.status(400).json({ message: 'Enter a positive whole-number RWF repayment' });
+    const { amount, paymentChannel, confirmed } = req.body;
+    const validationError = validateStaffRepaymentInput({ amount, paymentChannel, confirmed });
+    if (validationError) return res.status(400).json({ message: validationError });
 
     try {
         const loan = await LoanApplication.findById(req.params.loanId);
@@ -203,9 +215,19 @@ async function recordRepayment(req, res) {
         if (loan.status !== 'approved') return res.status(409).json({ message: 'Repayments can only be recorded for approved loans' });
 
         const paidAt = new Date();
+        const receiptNumber = `RCP-${crypto.randomUUID()}`;
         const interestDue = loan.unpaidInterest + calculateAccruedInterest(loan.outstandingPrincipal, loan.annualInterestRate, loan.lastPaymentAt || loan.approvedAt, paidAt);
         const allocation = allocateRepayment(amount, loan.outstandingPrincipal, interestDue);
-        loan.repayments.push({ amount, interestPortion: allocation.interestPortion, principalPortion: allocation.principalPortion, recordedBy: req.user.id, paidAt });
+        loan.repayments.push({
+            amount,
+            interestPortion: allocation.interestPortion,
+            principalPortion: allocation.principalPortion,
+            recordedBy: req.user.id,
+            receiptNumber,
+            paymentChannel,
+            paymentMode: 'staff_recorded',
+            paidAt
+        });
         loan.interestIncome += allocation.interestPortion;
         loan.principalRecovered += allocation.principalPortion;
         loan.outstandingPrincipal = allocation.remainingPrincipal;
@@ -213,7 +235,7 @@ async function recordRepayment(req, res) {
         loan.lastPaymentAt = paidAt;
         if (loan.outstandingPrincipal === 0) loan.status = 'repaid';
         await loan.save();
-        return res.status(200).json({ message: 'Repayment recorded', loan });
+        return res.status(200).json({ message: 'Customer repayment recorded', receiptNumber, loan });
     } catch (error) {
         if (error.message === 'Repayment exceeds the current balance due') return res.status(400).json({ message: error.message });
         console.error('Loan repayment failed:', error.message);
@@ -226,6 +248,10 @@ function paymentAttemptMatches(attempt, { loanId, amount, channel, accountId }) 
         && attempt.amount === amount
         && attempt.channel === channel
         && String(attempt.accountId || '') === String(accountId || '');
+}
+
+function canRepayOwnLoan(role) {
+    return role === 'user' || role === 'employee';
 }
 
 function respondWithPaymentAttempt(res, attempt, loan) {
@@ -265,8 +291,8 @@ async function payLoanWithVirtualSimulator(req, res) {
     if (typeof simulateFailure !== 'boolean') {
         return res.status(400).json({ message: 'Simulation outcome must be a boolean' });
     }
-    if (req.user.role !== 'user') {
-        return res.status(403).json({ message: 'Only customers can make virtual loan repayments' });
+    if (!canRepayOwnLoan(req.user.role)) {
+        return res.status(403).json({ message: 'Only loan applicants can make repayments' });
     }
 
     const attemptQuery = { applicant: req.user.id, idempotencyKey };
@@ -424,8 +450,8 @@ async function payLoanWithVirtualSimulator(req, res) {
 
 async function payLoanFromAccount(req, res) {
     const { amount, accountId, idempotencyKey } = req.body;
-    if (req.user.role !== 'user') {
-        return res.status(403).json({ message: 'Only customers can repay their own loans from an account' });
+    if (!canRepayOwnLoan(req.user.role)) {
+        return res.status(403).json({ message: 'Only loan applicants can repay their own loans from an account' });
     }
     if (!mongoose.Types.ObjectId.isValid(req.params.loanId) || !mongoose.Types.ObjectId.isValid(accountId)) {
         return res.status(400).json({ message: 'Select a valid loan and bank account' });
@@ -601,4 +627,16 @@ async function markLoanDefaulted(req, res) {
     }
 }
 
-module.exports = { listLoans, createLoan, decideLoan, recordRepayment, payLoanWithVirtualSimulator, payLoanFromAccount, markLoanDefaulted, paymentAttemptMatches };
+module.exports = {
+    listLoans,
+    createLoan,
+    decideLoan,
+    recordRepayment,
+    payLoanWithVirtualSimulator,
+    payLoanFromAccount,
+    markLoanDefaulted,
+    paymentAttemptMatches,
+    canManageLoan,
+    canRepayOwnLoan,
+    validateStaffRepaymentInput
+};

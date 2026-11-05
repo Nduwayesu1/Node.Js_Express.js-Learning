@@ -8,6 +8,7 @@ const attendanceSchema = new Schema({
     branchName: { type: String, required: true },
     dayKey: { type: String, required: true },
     checkInAt: { type: Date, required: true, default: Date.now },
+    checkOutAt: { type: Date },
     status: { type: String, enum: ['present'], required: true, default: 'present' },
     photoConsentAt: { type: Date, required: true },
     photoPublicId: { type: String, select: false },

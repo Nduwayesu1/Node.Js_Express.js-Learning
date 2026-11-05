@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ArrowDownToLine, ArrowRight, AtSign, Bell, Building2, CalendarCheck, Camera, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Clock3, HandCoins, LayoutDashboard, LockKeyhole, LogOut, Menu, MessageSquareText, ShieldCheck, UserPlus, UserRound, UsersRound, Wallet, X } from 'lucide-react';
-import { activateBankMember, activateBankStaff, activateUser, addBankBranch, checkInForAttendance, confirmPasswordReset, createBank, createBankAccount, createBankAdmin, createBankMember, createBankStaff, createLoan, createPayrollBatch, deactivateBankMember, deactivateBankStaff, decideLoan, deleteUser, depositToBankAccount, getAssignedBank, getAttendancePhoto, getAvailableBanks, getBankAccountTransactions, getBankAccounts, getBankAttendance, getBankMembers, getBankStaff, getBanks, getFinanceBanks, getGuestFeedback, getLoans, getMyAttendance, getMyBankAccounts, getPayrollBatches, getPayrollEmployees, getProfile, getRwandaCells, getRwandaDistricts, getRwandaProvinces, getRwandaSectors, getRwandaVillages, getUsers, login, markGuestFeedbackReviewed, markLoanDefaulted, payLoanFromAccount, payLoanWithVirtualSimulator, recordLoanRepayment, requestPasswordReset, resendOtp, searchTransferRecipients, submitGuestFeedback, transferBetweenAccounts, updateBankAccountStatus, updateProfile, updateUser, verifyOtp } from './api';
+import { activateBankMember, activateBankStaff, activateUser, addBankBranch, checkInForAttendance, checkOutForAttendance, confirmPasswordReset, createBank, createBankAccount, createBankAdmin, createBankMember, createBankStaff, createLoan, createPayrollBatch, deactivateBankMember, deactivateBankStaff, decideLoan, deleteUser, depositToBankAccount, getAssignedBank, getAttendancePhoto, getAvailableBanks, getBankAccountTransactions, getBankAccounts, getBankAttendance, getBankMembers, getBankStaff, getBanks, getFinanceBanks, getGuestFeedback, getLoans, getMyAttendance, getMyBankAccounts, getPayrollBatches, getPayrollEmployees, getProfile, getRwandaCells, getRwandaDistricts, getRwandaProvinces, getRwandaSectors, getRwandaVillages, getUsers, login, markGuestFeedbackReviewed, markLoanDefaulted, payLoanFromAccount, payLoanWithVirtualSimulator, recordLoanRepayment, requestPasswordReset, resendOtp, searchTransferRecipients, submitGuestFeedback, transferBetweenAccounts, updateBankAccountStatus, updateProfile, updateUser, verifyOtp } from './api';
 import './styles.css';
 
 const initialForm = { email: '', password: '' };
@@ -119,12 +119,6 @@ function App() {
 
   useEffect(() => {
     if (!token || !profile) return;
-    const canViewLoans = profile.role !== 'employee'
-      || ['bank_admin', 'branch_manager', 'general_manager'].includes(profile.staffRole || 'branch_manager');
-    if (!canViewLoans) {
-      setLoanApplications([]);
-      return;
-    }
     getLoans(token).then(({ loans, systemAnnualInterestRate: rate }) => {
       setLoanApplications(loans);
       if (Number.isFinite(rate)) setSystemAnnualInterestRate(rate);
@@ -261,11 +255,11 @@ function App() {
     }
   }
 
-  async function handleLoanRepayment(loanId, amount) {
+  async function handleLoanRepayment(loanId, payment) {
     try {
-      await recordLoanRepayment(token, loanId, amount);
+      const result = await recordLoanRepayment(token, loanId, payment);
       await refreshLoans();
-      setNotice({ type: 'success', text: 'Loan repayment recorded.' });
+      setNotice({ type: 'success', text: `Customer repayment recorded. Receipt ${result.receiptNumber}.` });
       recordActivity('A loan repayment was recorded.');
       return true;
     } catch (error) {
@@ -353,8 +347,8 @@ function App() {
       <section className="auth-layout">
         <div className="brand-copy">
           <div className="brand-mark"><img className="brand-logo" src="/e-banking-payment.svg" alt="E-banking payment" /><span>LOAN</span></div>
-          <h1>Make your next<br /><em>move</em> count.</h1>
-          <p>A calm, secure place to manage your account and keep momentum on the things that matter.</p>
+          <h1>Financial tools<br />built for <em>growth.</em></h1>
+          <p>Manage your accounts, track loan applications, and make secure payments in one place.</p>
           <div className="trust-line"><ShieldCheck size={17} /> Secure account access</div>
         </div>
         <section className="auth-card">
@@ -405,7 +399,6 @@ function AuthForm({ form, loading, notice, onChange, onSubmit, onVerify, onForgo
     </form>
     <div className="card-footer">Need a member account? Contact your Bank Admin.</div>
     <button className="quiet-button" type="button" onClick={onForgot}>Forgot password?</button>
-    <button className="quiet-button" onClick={onVerify}>I already have an OTP</button>
     <button className="quiet-button" type="button" onClick={onGuest}>Continue as Guest · View demo & send feedback</button>
   </>;
 }
@@ -535,7 +528,7 @@ function GuestReadOnlyFeatures({ section }) {
     },
     people: {
       title: 'HR and attendance',
-      description: 'HR reviews staff status and bank-scoped attendance. Employees may capture a selfie with consent; no facial recognition is performed.',
+      description: 'HR reviews staff status and bank-scoped attendance. Employees may capture a selfie with consent; photos are stored in authenticated Cloudinary storage.',
       headers: ['Fictional employee', 'Role', 'Attendance'],
       rows: [['Demo Employee A', 'Sub-branch Manager', 'Present · 08:04'], ['Demo Employee B', 'HR Manager', 'Present · 08:11'], ['Demo Employee C', 'Finance Manager', 'Not recorded']]
     },
@@ -596,6 +589,7 @@ function Dashboard({ profile, users, banks, token, pagination, userQuery, setUse
       {manager && staffRole === 'bank_admin' && section === 'overview' && <BankAdminReportDashboard banks={banks} token={token} loanApplications={loanApplications} />}
       {manager && staffRole === 'hr_manager' && section === 'hr-dashboard' && <HRDashboard token={token} />}
       {manager && section === 'attendance' && <EmployeeAttendanceDashboard token={token} />}
+      {manager && section === 'my-loans' && <EmployeeLoanDashboard profile={profile} applications={loanApplications} token={token} onVirtualLoanPayment={onVirtualLoanPayment} onAccountLoanPayment={onAccountLoanPayment} />}
       {manager && staffRole === 'finance_manager' && section === 'directory' && <BankStaffDirectoryDashboard token={token} />}
       {manager && staffRole === 'general_manager' && section === 'overview' && <GeneralManagerDashboard banks={banks} token={token} loanApplications={loanApplications} />}
       {manager && staffRole === 'finance_manager' && section === 'payroll' && <FinancePayrollDashboard banks={banks} token={token} onActivity={onActivity} />}
@@ -712,7 +706,7 @@ function EmployeeAccessRow({ user, banks, currentUserId, onRoleUpdate }) {
 function Sidebar({ profile, staffRole, section, setSection, open, setOpen, onLogout }) {
   const go = (next) => { setSection(next); setOpen(false); };
   const navigation = profile.role === 'employee'
-    ? [{ section: 'attendance', label: 'My attendance', icon: CalendarCheck }]
+    ? [{ section: 'attendance', label: 'My attendance', icon: CalendarCheck }, { section: 'my-loans', label: 'My loans', icon: HandCoins }]
     : [{ section: 'overview', label: 'Dashboard', icon: LayoutDashboard }];
   if (profile.role === 'user') navigation.push(
     { section: 'deposit', label: 'Make a deposit', icon: ArrowDownToLine },
@@ -1656,9 +1650,9 @@ function HRDashboard({ token }) {
     </div>
     <section className="bank-panel transaction-panel">
       <div className="bank-panel-heading"><div><span className="eyebrow">ATTENDANCE</span><h2>Employee check-ins</h2></div><CalendarCheck size={22} /></div>
-      <p className="form-disclaimer">Attendance photos are encrypted at rest and visible only to HR Managers assigned to this bank. Photos are evidence only; the system does not use facial recognition.</p>
+      <p className="form-disclaimer">Attendance photos are stored in authenticated Cloudinary storage and visible only to HR Managers assigned to this bank. Photos are evidence only; the system does not use facial recognition.</p>
       {photoError && <p className="notice error" role="alert">{photoError}</p>}
-      {attendance.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Employee</th><th>Sub-branch</th><th>Date</th><th>Check-in</th><th>Attendance evidence</th></tr></thead><PaginatedRows rows={attendance} colSpan={5} renderRow={(record) => <tr key={record._id}><td><strong>{record.employee?.name || 'Employee'}</strong><br /><small>{record.employee?.email || ''}</small></td><td>{record.branchName || 'Unassigned'}</td><td>{record.dayKey}</td><td>{new Date(record.checkInAt).toLocaleTimeString()}</td><td><button className="manage-button" type="button" disabled={loadingPhotoId === record._id} onClick={() => showAttendancePhoto(record)}>{loadingPhotoId === record._id ? 'Loading...' : 'View consented selfie'}</button></td></tr>} /></table></div> : !loading && <p className="empty-state">No employee check-ins in the past 30 days.</p>}
+      {attendance.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Employee</th><th>Sub-branch</th><th>Date</th><th>Check-in</th><th>Check-out</th><th>Attendance evidence</th></tr></thead><PaginatedRows rows={attendance} colSpan={6} renderRow={(record) => <tr key={record._id}><td><strong>{record.employee?.name || 'Employee'}</strong><br /><small>{record.employee?.email || ''}</small></td><td>{record.branchName || 'Unassigned'}</td><td>{record.dayKey}</td><td>{new Date(record.checkInAt).toLocaleTimeString()}</td><td>{record.checkOutAt ? new Date(record.checkOutAt).toLocaleTimeString() : 'Not checked out'}</td><td><button className="manage-button" type="button" disabled={loadingPhotoId === record._id} onClick={() => showAttendancePhoto(record)}>{loadingPhotoId === record._id ? 'Loading...' : 'View consented selfie'}</button></td></tr>} /></table></div> : !loading && <p className="empty-state">No employee check-ins in the past 30 days.</p>}
     </section>
     {photoUrl && <div className="modal-backdrop" role="presentation" onClick={() => setPhotoUrl('')}><section className="modal-card" role="dialog" aria-modal="true" aria-label="Attendance selfie" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">HR-ONLY ATTENDANCE EVIDENCE</span><h2>Employee check-in selfie</h2></div><button className="icon-button" type="button" aria-label="Close selfie" onClick={() => setPhotoUrl('')}><X size={18} /></button></div><img className="attendance-photo-preview" src={photoUrl} alt="Employee attendance selfie" /></section></div>}
     <section className="bank-panel transaction-panel">
@@ -1683,10 +1677,12 @@ function EmployeeAttendanceDashboard({ token }) {
   const [stream, setStream] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
   const [notice, setNotice] = useState({ type: '', text: '' });
   const videoRef = useRef(null);
   const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Kigali', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-  const checkedInToday = attendance.some((record) => record.dayKey === todayKey);
+  const todayAttendance = attendance.find((record) => record.dayKey === todayKey);
+  const checkedInToday = Boolean(todayAttendance);
 
   useEffect(() => {
     let active = true;
@@ -1760,11 +1756,27 @@ function EmployeeAttendanceDashboard({ token }) {
       setAttendance((records) => [result.attendance, ...records]);
       setPhoto('');
       setConsent(false);
-      setNotice({ type: 'success', text: 'Attendance recorded. Your selfie is encrypted and available only to HR for attendance review.' });
+      setNotice({ type: 'success', text: 'Attendance recorded. Your selfie is available only to HR for attendance review.' });
     } catch (error) {
       setNotice({ type: 'error', text: error.message });
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function submitCheckOut() {
+    setCheckingOut(true);
+    setNotice({ type: '', text: '' });
+    try {
+      const result = await checkOutForAttendance(token);
+      setAttendance((records) => records.map((record) => (
+        record._id === result.attendance._id ? result.attendance : record
+      )));
+      setNotice({ type: '', text: '' });
+    } catch (error) {
+      setNotice({ type: 'error', text: error.message });
+    } finally {
+      setCheckingOut(false);
     }
   }
 
@@ -1775,8 +1787,8 @@ function EmployeeAttendanceDashboard({ token }) {
     ]} />
     <section className="bank-panel transaction-panel">
       <div className="bank-panel-heading"><div><span className="eyebrow">EMPLOYEE ATTENDANCE</span><h2>Record today’s check-in</h2></div><Camera size={22} /></div>
-      <p className="form-disclaimer">Your selfie is stored encrypted and can be viewed only by HR Managers at your bank. It is used as attendance evidence only; no facial recognition or identity matching is performed. If you do not consent to photo storage, contact your HR Manager for the bank’s alternative attendance process.</p>
-      {checkedInToday ? <p className="notice success" role="status">Attendance already recorded for today.</p> : <form className="bank-form" onSubmit={submitCheckIn}>
+      <p className="form-disclaimer">Your selfie is stored in authenticated Cloudinary storage and can be viewed only by HR Managers at your bank. It is used as attendance evidence only; no facial recognition or identity matching is performed. If you do not consent to photo storage, contact your HR Manager for the bank’s alternative attendance process.</p>
+      {checkedInToday ? <p className="notice success" role="status">Check-in recorded for today.</p> : <form className="bank-form" onSubmit={submitCheckIn}>
         <label className="check-row"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} required /> I consent to capturing and securely storing this selfie as attendance evidence, accessible to my bank’s HR Manager.</label>
         {cameraOpen && <div className="attendance-camera"><video ref={videoRef} autoPlay playsInline aria-label="Live selfie camera preview" /><button className="bank-button" type="button" onClick={captureSelfie}>Capture selfie</button></div>}
         {!cameraOpen && !photo && <button className="bank-button" type="button" disabled={!consent || submitting} onClick={startCamera}><Camera size={17} /> Start camera</button>}
@@ -1784,8 +1796,49 @@ function EmployeeAttendanceDashboard({ token }) {
         {notice.text && <Notice notice={notice} />}
         <button className="bank-button" type="submit" disabled={!consent || !photo || submitting}>{submitting ? 'Recording attendance...' : 'Record attendance'}</button>
       </form>}
+      {todayAttendance && !todayAttendance.checkOutAt && <div className="bank-form"><p className="form-disclaimer">Checked in at {new Date(todayAttendance.checkInAt).toLocaleTimeString()}.</p><button className="bank-button" type="button" onClick={submitCheckOut} disabled={checkingOut}>{checkingOut ? 'Recording check-out...' : 'Check out'}</button></div>}
+      {todayAttendance?.checkOutAt && <p className="form-disclaimer" role="status">Checked out at {new Date(todayAttendance.checkOutAt).toLocaleTimeString()}.</p>}
+      {notice.text && checkedInToday && <Notice notice={notice} />}
     </section>
-    <section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">HISTORY</span><h2>My attendance</h2></div><CalendarCheck size={22} /></div>{loading ? <p className="empty-state">Loading attendance history...</p> : attendance.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Date</th><th>Check-in time</th><th>Status</th></tr></thead><PaginatedRows rows={attendance} colSpan={3} renderRow={(record) => <tr key={record._id}><td>{record.dayKey}</td><td>{new Date(record.checkInAt).toLocaleTimeString()}</td><td><span className="status verified">Present</span></td></tr>} /></table></div> : <p className="empty-state">No attendance has been recorded yet.</p>}</section>
+    <section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">HISTORY</span><h2>My attendance</h2></div><CalendarCheck size={22} /></div>{loading ? <p className="empty-state">Loading attendance history...</p> : attendance.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Date</th><th>Check-in</th><th>Check-out</th><th>Status</th></tr></thead><PaginatedRows rows={attendance} colSpan={4} renderRow={(record) => <tr key={record._id}><td>{record.dayKey}</td><td>{new Date(record.checkInAt).toLocaleTimeString()}</td><td>{record.checkOutAt ? new Date(record.checkOutAt).toLocaleTimeString() : 'Not checked out'}</td><td><span className="status verified">Present</span></td></tr>} /></table></div> : <p className="empty-state">No attendance has been recorded yet.</p>}</section>
+  </>;
+}
+
+function EmployeeLoanDashboard({ profile, applications, token, onVirtualLoanPayment, onAccountLoanPayment }) {
+  const [accounts, setAccounts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const employeeLoans = applications.filter((application) => (
+    String(application.applicant?._id || application.applicant) === String(profile._id)
+  ));
+
+  useEffect(() => {
+    let active = true;
+    getMyBankAccounts(token)
+      .then(({ accounts: loadedAccounts }) => { if (active) setAccounts(loadedAccounts || []); })
+      .catch((loadError) => { if (active) setError(loadError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [token]);
+
+  const eligibleLoanAccounts = (application) => accounts.filter((account) => (
+    account.status === 'active'
+    && String(account.bankId?._id || account.bankId) === String(application.bank?._id || application.bank)
+    && String(account.branchId?._id || account.branchId) === String(application.branchId?._id || application.branchId)
+  ));
+
+  return <>
+    <section className="bank-panel transaction-panel">
+      <div className="bank-panel-heading"><div><span className="eyebrow">EMPLOYEE LOANS</span><h2>My loans</h2></div><HandCoins size={22} /></div>
+      <p className="form-disclaimer">You can repay only loans issued to you. Bank-account repayments debit an active account you own at the loan’s bank and sub-branch.</p>
+      {error && <Notice notice={{ type: 'error', text: error }} />}
+      {loading ? <p className="empty-state">Loading your loans...</p> : employeeLoans.length ? <div className="loan-list">{employeeLoans.map((application) => <article className="customer-loan-row" key={application._id}>
+        <div className="customer-loan-summary"><strong><LoanMoney amount={application.amount} /> · {application.bankName}</strong><small>{application.purpose} · {application.branchName} · {application.termMonths} months</small>{application.annualInterestRate !== undefined && <small>{application.annualInterestRate}% annual interest · {currency(application.monthlyPayment)} estimated monthly payment</small>}<small>Outstanding principal: {currency(application.outstandingPrincipal)} · {currency(application.interestIncome)} interest paid</small></div>
+        <span className={`loan-status ${application.status}`}>{application.status}</span>
+        {application.status === 'approved' && <CustomerLoanRepayment application={application} accounts={eligibleLoanAccounts(application)} onAccountPay={onAccountLoanPayment} onVirtualPay={onVirtualLoanPayment} onAccountsRefresh={async () => { const { accounts: refreshedAccounts } = await getMyBankAccounts(token); setAccounts(refreshedAccounts || []); }} />}
+        {application.repayments?.length > 0 && <div className="customer-payment-receipts">{application.repayments.slice(-3).reverse().map((item, index) => <div key={`${application._id}-receipt-${index}`}><strong>{currency(item.amount)} · {new Date(item.paidAt).toLocaleDateString()}</strong><small>{item.receiptNumber ? `Receipt ${item.receiptNumber} · ` : ''}{item.paymentMode === 'virtual_simulation' ? 'Virtual simulation' : item.paymentMode === 'account_transfer' ? 'Paid from bank account' : 'Received by bank staff'}{item.paymentChannel ? ` · ${item.paymentChannel.replaceAll('_', ' ')}` : ''}</small></div>)}</div>}
+      </article>)}</div> : <p className="empty-state">No loans are linked to your employee account.</p>}
+    </section>
   </>;
 }
 
@@ -1946,6 +1999,8 @@ function ManagerDashboard({ applications, systemAnnualInterestRate, section, not
 
 function LoanApplicationCard({ application, systemAnnualInterestRate, readOnly = false, onDecision, onRepayment, onDefault }) {
   const [repayment, setRepayment] = useState('');
+  const [paymentChannel, setPaymentChannel] = useState('cash');
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [confirmDefault, setConfirmDefault] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const quote = calculateLoanQuote(application.amount, systemAnnualInterestRate, application.termMonths);
@@ -1953,7 +2008,14 @@ function LoanApplicationCard({ application, systemAnnualInterestRate, readOnly =
   async function submitRepayment(event) {
     event.preventDefault();
     setSubmitting(true);
-    if (await onRepayment(application._id, Number(repayment))) setRepayment('');
+    if (await onRepayment(application._id, {
+      amount: Number(repayment),
+      paymentChannel,
+      confirmed: paymentConfirmed
+    })) {
+      setRepayment('');
+      setPaymentConfirmed(false);
+    }
     setSubmitting(false);
   }
 
@@ -1970,10 +2032,16 @@ function LoanApplicationCard({ application, systemAnnualInterestRate, readOnly =
       {['approved', 'repaid', 'defaulted'].includes(application.status) && <>
         <div className="loan-table-finances"><span>Outstanding <strong>{currency(application.outstandingPrincipal)}</strong></span><span>Collected interest <strong>{currency(application.interestIncome)}</strong></span><span>Loss <strong>{currency(application.loss)}</strong></span><span>Net <strong>{currency((application.interestIncome || 0) - (application.loss || 0))}</strong></span><span>Monthly <strong>{currency(application.monthlyPayment)}</strong></span></div>
         {!readOnly && application.status === 'approved' && <>
-          <form className="repayment-form" onSubmit={submitRepayment}><label>Record repayment (RWF)<input type="number" min="1" step="1" value={repayment} onChange={(event) => setRepayment(event.target.value)} required /></label><button className="bank-button" type="submit" disabled={submitting}>{submitting ? 'Recording...' : 'Record payment'}</button></form>
+          <form className="repayment-form" onSubmit={submitRepayment}>
+            <label>Customer payment received (RWF)<input type="number" min="1" step="1" value={repayment} onChange={(event) => setRepayment(event.target.value)} required /></label>
+            <label>Payment method<select value={paymentChannel} onChange={(event) => setPaymentChannel(event.target.value)}><option value="cash">Cash</option><option value="mobile_money">Mobile Money</option><option value="bank_transfer">Bank transfer</option></select></label>
+            <label className="check-row repayment-confirmation"><input type="checkbox" checked={paymentConfirmed} onChange={(event) => setPaymentConfirmed(event.target.checked)} required /> I confirm this payment has already been received from the customer.</label>
+            <button className="bank-button" type="submit" disabled={submitting || !paymentConfirmed}>{submitting ? 'Recording...' : 'Record customer payment'}</button>
+            <p className="form-disclaimer">Records a payment already collected; this does not debit a customer account. A receipt number is generated.</p>
+          </form>
           <details className="loan-default-details"><summary>Mark default</summary><form className="loan-default-form" onSubmit={(event) => { event.preventDefault(); onDefault(application._id); }}><label className="check-row"><input type="checkbox" checked={confirmDefault} onChange={(event) => setConfirmDefault(event.target.checked)} required /> Confirm remaining principal will be recorded as a loss.</label><button className="delete-button" type="submit" disabled={!confirmDefault}>Confirm default</button></form></details>
         </>}
-        {application.repayments?.length > 0 && <div className="repayment-history">{application.repayments.slice(-3).reverse().map((item, index) => <div key={`${application._id}-payment-${index}`}><span>{new Date(item.paidAt).toLocaleDateString()} · {currency(item.amount)}</span><small>{currency(item.interestPortion)} interest / {currency(item.principalPortion)} principal</small></div>)}</div>}
+        {application.repayments?.length > 0 && <div className="repayment-history">{application.repayments.slice(-3).reverse().map((item, index) => <div key={`${application._id}-payment-${index}`}><span>{new Date(item.paidAt).toLocaleDateString()} · {currency(item.amount)}</span><small>{item.receiptNumber ? `Receipt ${item.receiptNumber} · ` : ''}{item.paymentChannel ? `${item.paymentChannel.replaceAll('_', ' ')} · ` : ''}{currency(item.interestPortion)} interest / {currency(item.principalPortion)} principal</small></div>)}</div>}
       </>}
     </td>
   </tr>;
@@ -2194,7 +2262,7 @@ function UserDashboard({ profile, banks, applications, notice, setNotice, onLoan
       </form>
     </section>
     <section className="bank-panel transaction-panel" id="customer-activity"><div className="bank-panel-heading"><div><span className="eyebrow">ACCOUNT ACTIVITY</span><h2>All transactions</h2></div><Wallet size={22} /></div>{transactions.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Date</th><th>Account</th><th>Transaction</th><th>Amount</th><th>Balance after</th></tr></thead><PaginatedRows rows={transactions} colSpan={5} renderRow={(transaction) => <tr key={`${transaction.accountNumber}-${transaction._id}`}><td>{new Date(transaction.createdAt).toLocaleString()}</td><td>{transaction.accountName}<br /><small>{transaction.accountNumber}</small></td><td>{transaction.description || transaction.type.replaceAll('_', ' ')}</td><td className={['deposit', 'transfer_in', 'loan_disbursement'].includes(transaction.type) ? 'financial-positive' : 'financial-negative'}>{['deposit', 'transfer_in', 'loan_disbursement'].includes(transaction.type) ? '+' : '-'}{currency(transaction.amount)}</td><td>{currency(transaction.balanceAfter)}</td></tr>} /></table></div> : <p className="empty-state">Your account activity will appear here.</p>}</section>
-    <section className="bank-panel loans-panel" id="customer-applications"><div className="bank-panel-heading"><div><span className="eyebrow">APPLICATION TRACKER</span><h2>Your loan requests</h2></div><Clock3 size={22} /></div>{latestApplications.length ? <div className="loan-list">{latestApplications.map((application) => <article className="customer-loan-row" key={application._id}><div className="customer-loan-summary"><strong><LoanMoney amount={application.amount} /> · {application.bankName}</strong><small>{application.purpose} · {application.branchName} · {application.termMonths} months</small>{application.annualInterestRate !== undefined && <small>{application.annualInterestRate}% annual interest · {currency(application.monthlyPayment)} estimated monthly payment</small>}<small>Outstanding principal: {currency(application.outstandingPrincipal)} · {currency(application.interestIncome)} interest paid</small></div><span className={`loan-status ${application.status}`}>{application.status}</span>{application.status === 'approved' && <CustomerLoanRepayment application={application} accounts={eligibleLoanAccounts(application)} onAccountPay={onAccountLoanPayment} onVirtualPay={onVirtualLoanPayment} onAccountsRefresh={async () => { const { accounts } = await getMyBankAccounts(token); setBankAccounts(accounts || []); }} />}{application.repayments?.length > 0 && <div className="customer-payment-receipts">{application.repayments.slice(-3).reverse().map((item, index) => <div key={`${application._id}-receipt-${index}`}><strong>{currency(item.amount)} · {new Date(item.paidAt).toLocaleDateString()}</strong><small>{item.receiptNumber ? `Receipt ${item.receiptNumber} · ` : ''}{item.paymentMode === 'virtual_simulation' ? 'Virtual simulation' : item.paymentMode === 'account_transfer' ? 'Paid from bank account' : 'Recorded repayment'}{item.paymentChannel ? ` · ${item.paymentChannel.replaceAll('_', ' ')}` : ''}</small></div>)}</div>}</article>)}</div> : <p className="empty-state">You have not applied for a loan yet.</p>}</section>
+    <section className="bank-panel loans-panel" id="customer-applications"><div className="bank-panel-heading"><div><span className="eyebrow">APPLICATION TRACKER</span><h2>Your loan requests</h2></div><Clock3 size={22} /></div>{latestApplications.length ? <div className="loan-list">{latestApplications.map((application) => <article className="customer-loan-row" key={application._id}><div className="customer-loan-summary"><strong><LoanMoney amount={application.amount} /> · {application.bankName}</strong><small>{application.purpose} · {application.branchName} · {application.termMonths} months</small>{application.annualInterestRate !== undefined && <small>{application.annualInterestRate}% annual interest · {currency(application.monthlyPayment)} estimated monthly payment</small>}<small>Outstanding principal: {currency(application.outstandingPrincipal)} · {currency(application.interestIncome)} interest paid</small></div><span className={`loan-status ${application.status}`}>{application.status}</span>{application.status === 'approved' && <CustomerLoanRepayment application={application} accounts={eligibleLoanAccounts(application)} onAccountPay={onAccountLoanPayment} onVirtualPay={onVirtualLoanPayment} onAccountsRefresh={async () => { const { accounts } = await getMyBankAccounts(token); setBankAccounts(accounts || []); }} />}{application.repayments?.length > 0 && <div className="customer-payment-receipts">{application.repayments.slice(-3).reverse().map((item, index) => <div key={`${application._id}-receipt-${index}`}><strong>{currency(item.amount)} · {new Date(item.paidAt).toLocaleDateString()}</strong><small>{item.receiptNumber ? `Receipt ${item.receiptNumber} · ` : ''}{item.paymentMode === 'virtual_simulation' ? 'Virtual simulation' : item.paymentMode === 'account_transfer' ? 'Paid from bank account' : 'Received by bank staff'}{item.paymentChannel ? ` · ${item.paymentChannel.replaceAll('_', ' ')}` : ''}</small></div>)}</div>}</article>)}</div> : <p className="empty-state">You have not applied for a loan yet.</p>}</section>
   </>;
 }
 

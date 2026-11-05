@@ -88,7 +88,7 @@ export const createPayrollBatch = (token, body) => apiRequest('/api/payroll/batc
 export const getLoans = (token) => apiRequest('/api/loans', { token });
 export const createLoan = (token, body) => apiRequest('/api/loans', { method: 'POST', token, body });
 export const decideLoan = (token, loanId, body) => apiRequest(`/api/loans/${loanId}/decision`, { method: 'PATCH', token, body });
-export const recordLoanRepayment = (token, loanId, amount) => apiRequest(`/api/loans/${loanId}/repayments`, { method: 'POST', token, body: { amount } });
+export const recordLoanRepayment = (token, loanId, payment) => apiRequest(`/api/loans/${loanId}/repayments`, { method: 'POST', token, body: payment });
 export const payLoanWithVirtualSimulator = (token, loanId, body) => apiRequest(`/api/loans/${loanId}/virtual-payments`, { method: 'POST', token, body });
 export const payLoanFromAccount = (token, loanId, body) => apiRequest(`/api/loans/${loanId}/account-payments`, { method: 'POST', token, body });
 export const markLoanDefaulted = (token, loanId) => apiRequest(`/api/loans/${loanId}/default`, { method: 'PATCH', token });
@@ -96,6 +96,7 @@ export const getGuestFeedback = (token) => apiRequest('/api/admin/guest-feedback
 export const markGuestFeedbackReviewed = (token, feedbackId) => apiRequest(`/api/admin/guest-feedback/${feedbackId}/reviewed`, { method: 'PATCH', token });
 export const getMyAttendance = (token) => apiRequest('/api/attendance/mine', { token });
 export const checkInForAttendance = (token, body) => apiRequest('/api/attendance/check-in', { method: 'POST', token, body });
+export const checkOutForAttendance = (token) => apiRequest('/api/attendance/check-out', { method: 'POST', token });
 export const getBankAttendance = (token) => apiRequest('/api/attendance/hr', { token });
 export const getAttendancePhoto = async (token, attendanceId) => {
   let response;

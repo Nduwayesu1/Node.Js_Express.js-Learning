@@ -88,8 +88,8 @@ router.patch('/loans/:loanId/decision', requireAuth, loanController.decideLoan);
  * @swagger
  * /api/loans/{loanId}/repayments:
  *   post:
- *     summary: Record a repayment against an approved loan
- *     description: The repayment is allocated to accrued interest before principal.
+ *     summary: Record a customer repayment received by bank staff
+ *     description: System Admins, Bank Admins, and Sub-branch Managers with access to the loan may record a payment already received from the customer. This does not debit an account. The repayment is allocated to accrued interest before principal and receives a receipt number.
  *     tags: [Loans]
  *     security:
  *       - bearerAuth: []
@@ -104,12 +104,14 @@ router.patch('/loans/:loanId/decision', requireAuth, loanController.decideLoan);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [amount]
+ *             required: [amount, paymentChannel, confirmed]
  *             properties:
  *               amount: { type: integer, minimum: 1, example: 5000 }
+ *               paymentChannel: { type: string, enum: [cash, mobile_money, bank_transfer] }
+ *               confirmed: { type: boolean, enum: [true], description: Confirm that the customer's payment has already been received }
  *     responses:
- *       200: { description: Repayment recorded }
- *       400: { description: Invalid amount or repayment exceeds the balance due }
+ *       200: { description: Repayment recorded with a receipt number }
+ *       400: { description: Invalid amount, payment method, missing confirmation, or repayment exceeds the balance due }
  *       403: { description: Caller cannot record repayments for this branch }
  *       404: { description: Loan application not found }
  *       409: { description: Loan is not approved }
@@ -120,7 +122,7 @@ router.post('/loans/:loanId/repayments', requireAuth, loanController.recordRepay
  * @swagger
  * /api/loans/{loanId}/virtual-payments:
  *   post:
- *     summary: Simulate a customer loan repayment
+ *     summary: Simulate a borrower loan repayment
  *     description: Test-only virtual payment processing. A successful simulation updates the loan ledger and issues a receipt but moves no real funds and does not debit a bank or mobile-money account.
  *     tags: [Loans]
  *     security:
@@ -157,7 +159,7 @@ router.post('/loans/:loanId/virtual-payments', requireAuth, loanController.payLo
  * /api/loans/{loanId}/account-payments:
  *   post:
  *     summary: Repay an approved loan from the customer's bank account
- *     description: Debits an active account owned by the applicant at the same bank and sub-branch as the loan. The debit and loan ledger update are committed atomically.
+ *     description: Debits an active account owned by the loan applicant at the same bank and sub-branch as the loan. The debit and loan ledger update are committed atomically.
  *     tags: [Loans]
  *     security:
  *       - bearerAuth: []

@@ -401,7 +401,12 @@ async function requestPasswordReset(req, res) {
         await sendPasswordResetEmail(email, otp);
         return res.status(202).json({ message: 'If an active account exists for this email, a reset code will be sent.' });
     } catch (error) {
-        console.error('Password reset email failed:', { message: error.message, code: error.code, responseCode: error.responseCode });
+        console.error('Password reset email failed:', {
+            message: error.message,
+            code: error.code,
+            responseCode: error.responseCode,
+            command: error.command
+        });
         return res.status(503).json({ message: 'The password reset email could not be sent. Please try again later.' });
     }
 }

@@ -53,11 +53,19 @@ async function downloadAttendancePhoto(publicId) {
         type: 'authenticated',
         expires_at: Math.floor(Date.now() / 1000) + 60
     });
-    const response = await fetch(downloadUrl);
-    if (!response.ok) throw new Error(`Cloudinary photo download failed with status ${response.status}`);
+    let response;
+    try {
+        response = await fetch(downloadUrl, { headers: { Accept: 'image/jpeg' } });
+    } catch (cause) {
+        throw Object.assign(new Error('Unable to connect to Cloudinary to retrieve the attendance photo'), { status: 502, cause });
+    }
+    if (!response.ok) {
+        throw Object.assign(new Error(`Cloudinary could not retrieve the attendance photo (HTTP ${response.status})`), { status: 502 });
+    }
     const photo = Buffer.from(await response.arrayBuffer());
-    if (!photo.length || photo.length > 700 * 1024) {
-        throw new Error('Cloudinary returned an attendance photo with an invalid size');
+    if (!photo.length || photo.length > 700 * 1024
+        || photo[0] !== 0xff || photo[1] !== 0xd8 || photo[2] !== 0xff) {
+        throw Object.assign(new Error('Cloudinary returned invalid JPEG data for the attendance photo'), { status: 502 });
     }
     return photo;
 }
@@ -181,7 +189,7 @@ async function listMyAttendance(req, res) {
     if (req.user.role !== 'employee') return res.status(403).json({ message: 'Employee access is required' });
     try {
         const attendance = await Attendance.find({ employee: req.user.id })
-            .select('dayKey checkInAt status photoConsentAt')
+            .select('dayKey checkInAt checkOutAt status photoConsentAt')
             .sort({ checkInAt: -1 })
             .limit(90)
             .lean();
@@ -189,6 +197,37 @@ async function listMyAttendance(req, res) {
     } catch (error) {
         console.error('Employee attendance lookup failed:', error.message);
         return res.status(500).json({ message: 'Unable to load attendance history' });
+    }
+}
+
+async function checkOut(req, res) {
+    if (req.user.role !== 'employee') {
+        return res.status(403).json({ message: 'Employee access is required' });
+    }
+
+    try {
+        const dayKey = getKigaliDay(new Date());
+        const attendance = await Attendance.findOne({ employee: req.user.id, dayKey });
+        if (!attendance) {
+            return res.status(404).json({ message: 'Record your check-in before checking out' });
+        }
+        if (attendance.checkOutAt) {
+            return res.status(409).json({ message: 'Attendance has already been checked out for today' });
+        }
+
+        const checkedOut = await Attendance.findOneAndUpdate(
+            { _id: attendance._id, checkOutAt: { $exists: false } },
+            { $set: { checkOutAt: new Date() } },
+            { new: true, runValidators: true }
+        ).select('dayKey checkInAt checkOutAt status');
+
+        if (!checkedOut) {
+            return res.status(409).json({ message: 'Attendance has already been checked out for today' });
+        }
+        return res.status(200).json({ message: 'Attendance checked out successfully', attendance: checkedOut });
+    } catch (error) {
+        console.error('Employee attendance check-out failed:', error.message);
+        return res.status(500).json({ message: 'Unable to record attendance check-out' });
     }
 }
 
@@ -207,7 +246,7 @@ async function listBankAttendance(req, res) {
             bankId: hr.bankId,
             checkInAt: { $gte: since, $lte: until }
         })
-            .select('employee bankId branchId branchName dayKey checkInAt status photoConsentAt')
+            .select('employee bankId branchId branchName dayKey checkInAt checkOutAt status photoConsentAt')
             .populate('employee', 'name email staffRole')
             .sort({ checkInAt: -1 })
             .limit(500)
@@ -236,18 +275,22 @@ async function getAttendancePhoto(req, res) {
             : decryptPhoto(attendance);
         res.set({
             'Content-Type': 'image/jpeg',
+            'Content-Length': photo.length,
             'Cache-Control': 'private, no-store',
             'X-Content-Type-Options': 'nosniff'
         });
         return res.status(200).send(photo);
     } catch (error) {
         console.error('Attendance photo retrieval failed:', error.message);
-        return res.status(500).json({ message: 'Unable to retrieve the attendance photo' });
+        return res.status(error.status || 500).json({
+            message: error.status === 502 ? error.message : 'Unable to retrieve the attendance photo'
+        });
     }
 }
 
 module.exports = {
     checkIn,
+    checkOut,
     listMyAttendance,
     listBankAttendance,
     getAttendancePhoto,
