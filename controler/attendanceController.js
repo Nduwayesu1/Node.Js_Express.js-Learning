@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const cloudinary = require('cloudinary').v2;
 const { Readable } = require('stream');
 const Attendance = require('../modle/Attendance');
+const AttendancePhotoHash = require('../modle/AttendancePhotoHash');
 const Bank = require('../modle/Bank');
 const User = require('../modle/User');
 
@@ -93,6 +94,22 @@ function getKigaliDay(date) {
     }).format(date);
 }
 
+function getKigaliMinutes(date) {
+    const timeParts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Africa/Kigali',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23'
+    }).formatToParts(date);
+    const hour = Number(timeParts.find((part) => part.type === 'hour')?.value);
+    const minute = Number(timeParts.find((part) => part.type === 'minute')?.value);
+    return hour * 60 + minute;
+}
+
+function isCheckOutTime(date) {
+    return getKigaliMinutes(date) >= 17 * 60;
+}
+
 function encryptPhoto(photo) {
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', getEncryptionKey(), iv);
@@ -106,6 +123,52 @@ function decryptPhoto(attendance, ciphertext = attendance.photoCiphertext) {
     return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 }
 
+function hashAttendancePhoto(photo) {
+    return crypto.createHash('sha256').update(photo).digest('hex');
+}
+
+async function claimAttendancePhotoHash(sha256, employeeId) {
+    await AttendancePhotoHash.init();
+    let photoHash;
+    try {
+        photoHash = await AttendancePhotoHash.findOneAndUpdate(
+            { sha256 },
+            { $setOnInsert: { employee: employeeId } },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+        ).select('employee').lean();
+    } catch (error) {
+        if (error.code !== 11000) throw error;
+        photoHash = await AttendancePhotoHash.findOne({ sha256 }).select('employee').lean();
+        if (!photoHash) throw error;
+    }
+    return String(photoHash.employee) === String(employeeId);
+}
+
+async function removeUploadedPhoto(photoPublicId, attendanceId) {
+    if (attendanceId) {
+        try {
+            await Attendance.deleteOne({ _id: attendanceId });
+        } catch (error) {
+            console.error('Failed to remove attendance record after photo validation failed:', error.message);
+        }
+    }
+    try {
+        await deleteCloudinaryPhoto(photoPublicId);
+    } catch (error) {
+        console.error('Failed to remove attendance photo after validation failed:', error.message);
+    }
+}
+
+function parseAttendancePhoto(image) {
+    const imageMatch = typeof image === 'string' && image.match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
+    if (!imageMatch) return { error: 'Capture a JPEG selfie to record attendance' };
+    const photo = Buffer.from(imageMatch[1], 'base64');
+    if (!photo.length || photo.length > 700 * 1024 || photo[0] !== 0xff || photo[1] !== 0xd8 || photo[2] !== 0xff) {
+        return { error: 'The selfie must be a valid JPEG smaller than 700 KB' };
+    }
+    return { photo };
+}
+
 async function checkIn(req, res) {
     if (req.user.role !== 'employee') {
         return res.status(403).json({ message: 'Only bank employees can record attendance' });
@@ -113,15 +176,10 @@ async function checkIn(req, res) {
     if (req.body.photoConsent !== true) {
         return res.status(400).json({ message: 'Consent to store an attendance selfie is required' });
     }
-    const image = req.body.photo;
-    const imageMatch = typeof image === 'string' && image.match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
-    if (!imageMatch) return res.status(400).json({ message: 'Capture a JPEG selfie to record attendance' });
-
-    const photo = Buffer.from(imageMatch[1], 'base64');
-    if (!photo.length || photo.length > 700 * 1024 || photo[0] !== 0xff || photo[1] !== 0xd8 || photo[2] !== 0xff) {
-        return res.status(400).json({ message: 'The selfie must be a valid JPEG smaller than 700 KB' });
-    }
-    let encryptedPhoto;
+    const parsedPhoto = parseAttendancePhoto(req.body.photo);
+    if (parsedPhoto.error) return res.status(400).json({ message: parsedPhoto.error });
+    const { photo } = parsedPhoto;
+    const photoHash = hashAttendancePhoto(photo);
     try {
         configureCloudinary();
     } catch (error) {
@@ -169,6 +227,17 @@ async function checkIn(req, res) {
             }
             throw error;
         }
+        let photoOwnedByAnotherEmployee;
+        try {
+            photoOwnedByAnotherEmployee = !await claimAttendancePhotoHash(photoHash, employee._id);
+        } catch (error) {
+            await removeUploadedPhoto(photoPublicId, attendance._id);
+            throw error;
+        }
+        if (photoOwnedByAnotherEmployee) {
+            await removeUploadedPhoto(photoPublicId, attendance._id);
+            return res.status(409).json({ message: 'This exact selfie has already been used by another employee account. Capture a new selfie to continue.' });
+        }
         return res.status(201).json({
             message: 'Attendance recorded successfully',
             attendance: {
@@ -204,9 +273,26 @@ async function checkOut(req, res) {
     if (req.user.role !== 'employee') {
         return res.status(403).json({ message: 'Employee access is required' });
     }
+    const now = new Date();
+    if (!isCheckOutTime(now)) {
+        return res.status(409).json({ message: 'Check-out is available from 5:00 PM Rwanda time (Africa/Kigali)' });
+    }
+    if (req.body.photoConsent !== true) {
+        return res.status(400).json({ message: 'Consent to store a check-out selfie is required' });
+    }
+    const parsedPhoto = parseAttendancePhoto(req.body.photo);
+    if (parsedPhoto.error) return res.status(400).json({ message: parsedPhoto.error });
+    const { photo } = parsedPhoto;
+    const photoHash = hashAttendancePhoto(photo);
 
     try {
-        const dayKey = getKigaliDay(new Date());
+        try {
+            configureCloudinary();
+        } catch (error) {
+            console.error('Cloudinary attendance photo storage is not configured:', error.message);
+            return res.status(503).json({ message: 'Configure CLOUDINARY_URL for attendance photo storage' });
+        }
+        const dayKey = getKigaliDay(now);
         const attendance = await Attendance.findOne({ employee: req.user.id, dayKey });
         if (!attendance) {
             return res.status(404).json({ message: 'Record your check-in before checking out' });
@@ -215,14 +301,52 @@ async function checkOut(req, res) {
             return res.status(409).json({ message: 'Attendance has already been checked out for today' });
         }
 
-        const checkedOut = await Attendance.findOneAndUpdate(
-            { _id: attendance._id, checkOutAt: { $exists: false } },
-            { $set: { checkOutAt: new Date() } },
-            { new: true, runValidators: true }
-        ).select('dayKey checkInAt checkOutAt status');
+        let photoPublicId;
+        try {
+            photoPublicId = await uploadAttendancePhoto(photo);
+        } catch (error) {
+            console.error('Attendance check-out photo upload to Cloudinary failed:', error.message);
+            return res.status(503).json({ message: 'Unable to securely store the check-out photo' });
+        }
+
+        let checkedOut;
+        try {
+            checkedOut = await Attendance.findOneAndUpdate(
+                { _id: attendance._id, checkOutAt: { $exists: false } },
+                {
+                    $set: {
+                        checkOutAt: now,
+                        checkOutPhotoConsentAt: now,
+                        checkOutPhotoPublicId: photoPublicId
+                    }
+                },
+                { new: true, runValidators: true }
+            ).select('dayKey checkInAt checkOutAt status');
+        } catch (error) {
+            await removeUploadedPhoto(photoPublicId);
+            throw error;
+        }
 
         if (!checkedOut) {
+            await removeUploadedPhoto(photoPublicId);
             return res.status(409).json({ message: 'Attendance has already been checked out for today' });
+        }
+        try {
+            if (!await claimAttendancePhotoHash(photoHash, attendance.employee)) {
+                await Attendance.updateOne(
+                    { _id: attendance._id, checkOutPhotoPublicId: photoPublicId },
+                    { $unset: { checkOutAt: 1, checkOutPhotoConsentAt: 1, checkOutPhotoPublicId: 1 } }
+                );
+                await removeUploadedPhoto(photoPublicId);
+                return res.status(409).json({ message: 'This exact selfie has already been used by another employee account. Capture a new selfie to continue.' });
+            }
+        } catch (error) {
+            await Attendance.updateOne(
+                { _id: attendance._id, checkOutPhotoPublicId: photoPublicId },
+                { $unset: { checkOutAt: 1, checkOutPhotoConsentAt: 1, checkOutPhotoPublicId: 1 } }
+            );
+            await removeUploadedPhoto(photoPublicId);
+            throw error;
         }
         return res.status(200).json({ message: 'Attendance checked out successfully', attendance: checkedOut });
     } catch (error) {
@@ -246,12 +370,17 @@ async function listBankAttendance(req, res) {
             bankId: hr.bankId,
             checkInAt: { $gte: since, $lte: until }
         })
-            .select('employee bankId branchId branchName dayKey checkInAt checkOutAt status photoConsentAt')
+            .select('employee bankId branchId branchName dayKey checkInAt checkOutAt status photoConsentAt +checkOutPhotoPublicId')
             .populate('employee', 'name email staffRole')
             .sort({ checkInAt: -1 })
             .limit(500)
             .lean();
-        return res.status(200).json({ attendance });
+        return res.status(200).json({
+            attendance: attendance.map(({ checkOutPhotoPublicId, ...record }) => ({
+                ...record,
+                hasCheckOutPhoto: Boolean(checkOutPhotoPublicId)
+            }))
+        });
     } catch (error) {
         console.error('HR attendance report failed:', error.message);
         return res.status(500).json({ message: 'Unable to load the bank attendance report' });
@@ -267,11 +396,19 @@ async function getAttendancePhoto(req, res) {
         if (!hr?.bankId || hr.staffRole !== 'hr_manager') {
             return res.status(403).json({ message: 'HR Manager access for an assigned bank is required' });
         }
+        const photoType = req.query.type || 'check-in';
+        if (!['check-in', 'check-out'].includes(photoType)) {
+            return res.status(400).json({ message: 'Choose a valid attendance photo type' });
+        }
         const attendance = await Attendance.findOne({ _id: req.params.attendanceId, bankId: hr.bankId })
-            .select('+photoPublicId +photoCiphertext +photoIv +photoAuthTag');
+            .select('+photoPublicId +checkOutPhotoPublicId +photoCiphertext +photoIv +photoAuthTag');
         if (!attendance) return res.status(404).json({ message: 'Attendance record not found' });
-        const photo = attendance.photoPublicId
-            ? await downloadAttendancePhoto(attendance.photoPublicId)
+        const photoPublicId = photoType === 'check-out' ? attendance.checkOutPhotoPublicId : attendance.photoPublicId;
+        if (!photoPublicId && photoType === 'check-out') {
+            return res.status(404).json({ message: 'No check-out photo is available for this attendance record' });
+        }
+        const photo = photoPublicId
+            ? await downloadAttendancePhoto(photoPublicId)
             : decryptPhoto(attendance);
         res.set({
             'Content-Type': 'image/jpeg',
@@ -297,8 +434,13 @@ module.exports = {
     encryptPhoto,
     decryptPhoto,
     getKigaliDay,
+    getKigaliMinutes,
+    isCheckOutTime,
     configureCloudinary,
     uploadAttendancePhoto,
     downloadAttendancePhoto,
-    deleteCloudinaryPhoto
+    deleteCloudinaryPhoto,
+    hashAttendancePhoto,
+    claimAttendancePhotoHash,
+    parseAttendancePhoto
 };

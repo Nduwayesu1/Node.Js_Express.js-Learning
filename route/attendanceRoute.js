@@ -17,7 +17,7 @@ const checkInLimiter = rateLimit({
  * /api/attendance/check-in:
  *   post:
  *     summary: Record employee attendance with a consented selfie
- *     description: Stores the JPEG in authenticated Cloudinary storage and serves it only through the bank-scoped HR endpoint. The system does not use facial recognition or identity matching.
+ *     description: Stores the JPEG in authenticated Cloudinary storage and serves it only through the bank-scoped HR endpoint. Exact image-file reuse is rejected across employee accounts. The system does not use facial recognition or visual similarity matching.
  *     tags: [Attendance]
  *     security:
  *       - bearerAuth: []
@@ -35,7 +35,7 @@ const checkInLimiter = rateLimit({
  *       201: { description: Attendance recorded }
  *       400: { description: Consent missing or selfie invalid }
  *       403: { description: Active employee access required }
- *       409: { description: Attendance already recorded today }
+ *       409: { description: Attendance already recorded today or the exact image was used by another employee account }
  *       503: { description: Cloudinary photo storage is not configured or available }
  */
 router.post('/attendance/check-in', requireAuth, checkInLimiter, attendanceController.checkIn);
@@ -44,15 +44,28 @@ router.post('/attendance/check-in', requireAuth, checkInLimiter, attendanceContr
  * @swagger
  * /api/attendance/check-out:
  *   post:
- *     summary: Record the authenticated employee's check-out for today
+ *     summary: Record the authenticated employee's check-out with a consented selfie
+ *     description: Requires a new check-out selfie; exact image-file reuse is rejected across employee accounts. No facial recognition or visual similarity matching is performed.
  *     tags: [Attendance]
  *     security:
  *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [photoConsent, photo]
+ *             properties:
+ *               photoConsent: { type: boolean, enum: [true] }
+ *               photo: { type: string, description: JPEG data URL }
  *     responses:
- *       200: { description: Attendance check-out recorded }
+ *       200: { description: Attendance check-out and photo recorded }
+ *       400: { description: Consent missing or selfie invalid }
  *       403: { description: Employee access required }
  *       404: { description: No check-in exists for today }
- *       409: { description: Attendance was already checked out }
+ *       409: { description: Check-out is before 5 PM Kigali time, attendance already checked out, or the exact image was used by another employee account }
+ *       503: { description: Cloudinary photo storage is not configured or available }
  */
 router.post('/attendance/check-out', requireAuth, checkInLimiter, attendanceController.checkOut);
 
@@ -88,7 +101,8 @@ router.get('/attendance/hr', requireAuth, requireStaffRole('hr_manager'), attend
  * @swagger
  * /api/attendance/{attendanceId}/photo:
  *   get:
- *     summary: Retrieve an attendance selfie for HR review
+ *     summary: Retrieve an attendance check-in or check-out selfie for HR review
+ *     description: Select the photo using the optional type query parameter, which defaults to check-in.
  *     tags: [Attendance]
  *     security:
  *       - bearerAuth: []
@@ -97,6 +111,10 @@ router.get('/attendance/hr', requireAuth, requireStaffRole('hr_manager'), attend
  *         name: attendanceId
  *         required: true
  *         schema: { type: string }
+ *       - in: query
+ *         name: type
+ *         required: false
+ *         schema: { type: string, enum: [check-in, check-out], default: check-in }
  *     responses:
  *       200: { description: JPEG photo; retrieved from authenticated Cloudinary storage, private and non-cacheable }
  *       403: { description: HR Manager access required }

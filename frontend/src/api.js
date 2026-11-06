@@ -96,12 +96,12 @@ export const getGuestFeedback = (token) => apiRequest('/api/admin/guest-feedback
 export const markGuestFeedbackReviewed = (token, feedbackId) => apiRequest(`/api/admin/guest-feedback/${feedbackId}/reviewed`, { method: 'PATCH', token });
 export const getMyAttendance = (token) => apiRequest('/api/attendance/mine', { token });
 export const checkInForAttendance = (token, body) => apiRequest('/api/attendance/check-in', { method: 'POST', token, body });
-export const checkOutForAttendance = (token) => apiRequest('/api/attendance/check-out', { method: 'POST', token });
+export const checkOutForAttendance = (token, body) => apiRequest('/api/attendance/check-out', { method: 'POST', token, body });
 export const getBankAttendance = (token) => apiRequest('/api/attendance/hr', { token });
-export const getAttendancePhoto = async (token, attendanceId) => {
+export const getAttendancePhoto = async (token, attendanceId, type = 'check-in') => {
   let response;
   try {
-    response = await fetch(`${API_URL}/api/attendance/${attendanceId}/photo`, {
+    response = await fetch(`${API_URL}/api/attendance/${attendanceId}/photo?type=${encodeURIComponent(type)}`, {
       headers: { Authorization: 'Bearer ' + token }
     });
   } catch {

@@ -588,7 +588,7 @@ function Dashboard({ profile, users, banks, token, pagination, userQuery, setUse
       {manager && staffRole === 'bank_admin' && section === 'staff' && <BankStaffAdminDashboard token={token} banks={banks} onActivity={onActivity} />}
       {manager && staffRole === 'bank_admin' && section === 'overview' && <BankAdminReportDashboard banks={banks} token={token} loanApplications={loanApplications} />}
       {manager && staffRole === 'hr_manager' && section === 'hr-dashboard' && <HRDashboard token={token} />}
-      {manager && section === 'attendance' && <EmployeeAttendanceDashboard token={token} />}
+      {manager && section === 'attendance' && <EmployeeAttendanceDashboard token={token} profile={profile} />}
       {manager && section === 'my-loans' && <EmployeeLoanDashboard profile={profile} applications={loanApplications} token={token} onVirtualLoanPayment={onVirtualLoanPayment} onAccountLoanPayment={onAccountLoanPayment} />}
       {manager && staffRole === 'finance_manager' && section === 'directory' && <BankStaffDirectoryDashboard token={token} />}
       {manager && staffRole === 'general_manager' && section === 'overview' && <GeneralManagerDashboard banks={banks} token={token} loanApplications={loanApplications} />}
@@ -1560,6 +1560,7 @@ function HRDashboard({ token }) {
   const [members, setMembers] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [photoUrl, setPhotoUrl] = useState('');
+  const [photoTitle, setPhotoTitle] = useState('');
   const [photoError, setPhotoError] = useState('');
   const [loadingPhotoId, setLoadingPhotoId] = useState('');
   const [search, setSearch] = useState('');
@@ -1588,16 +1589,18 @@ function HRDashboard({ token }) {
     if (photoUrl) URL.revokeObjectURL(photoUrl);
   }, [photoUrl]);
 
-  async function showAttendancePhoto(record) {
+  async function showAttendancePhoto(record, type) {
     setPhotoError('');
-    setLoadingPhotoId(record._id);
+    const loadingKey = `${record._id}:${type}`;
+    setLoadingPhotoId(loadingKey);
     try {
-      const photo = await getAttendancePhoto(token, record._id);
+      const photo = await getAttendancePhoto(token, record._id, type);
+      setPhotoTitle(`${record.employee?.name || 'Employee'} · ${type === 'check-out' ? 'Check-out' : 'Check-in'} selfie`);
       setPhotoUrl(URL.createObjectURL(photo));
     } catch (loadError) {
       setPhotoError(loadError.message);
     } finally {
-      setLoadingPhotoId('');
+      setLoadingPhotoId((current) => current === loadingKey ? '' : current);
     }
   }
 
@@ -1649,12 +1652,12 @@ function HRDashboard({ token }) {
       <ReportLineChart title="Recent attendance" subtitle="Daily check-ins · last seven recorded dates" values={attendanceDailyBreakdown} />
     </div>
     <section className="bank-panel transaction-panel">
-      <div className="bank-panel-heading"><div><span className="eyebrow">ATTENDANCE</span><h2>Employee check-ins</h2></div><CalendarCheck size={22} /></div>
+      <div className="bank-panel-heading"><div><span className="eyebrow">ATTENDANCE</span><h2>Daily employee attendance</h2></div><CalendarCheck size={22} /></div>
       <p className="form-disclaimer">Attendance photos are stored in authenticated Cloudinary storage and visible only to HR Managers assigned to this bank. Photos are evidence only; the system does not use facial recognition.</p>
       {photoError && <p className="notice error" role="alert">{photoError}</p>}
-      {attendance.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Employee</th><th>Sub-branch</th><th>Date</th><th>Check-in</th><th>Check-out</th><th>Attendance evidence</th></tr></thead><PaginatedRows rows={attendance} colSpan={6} renderRow={(record) => <tr key={record._id}><td><strong>{record.employee?.name || 'Employee'}</strong><br /><small>{record.employee?.email || ''}</small></td><td>{record.branchName || 'Unassigned'}</td><td>{record.dayKey}</td><td>{new Date(record.checkInAt).toLocaleTimeString()}</td><td>{record.checkOutAt ? new Date(record.checkOutAt).toLocaleTimeString() : 'Not checked out'}</td><td><button className="manage-button" type="button" disabled={loadingPhotoId === record._id} onClick={() => showAttendancePhoto(record)}>{loadingPhotoId === record._id ? 'Loading...' : 'View consented selfie'}</button></td></tr>} /></table></div> : !loading && <p className="empty-state">No employee check-ins in the past 30 days.</p>}
+      {attendance.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Employee</th><th>Sub-branch</th><th>Date</th><th>Check-in</th><th>Check-out</th><th>Attendance evidence</th></tr></thead><PaginatedRows rows={attendance} colSpan={6} renderRow={(record) => <tr key={record._id}><td><strong>{record.employee?.name || 'Employee'}</strong><br /><small>{record.employee?.email || ''}</small></td><td>{record.branchName || 'Unassigned'}</td><td>{record.dayKey}</td><td>{new Date(record.checkInAt).toLocaleTimeString()}</td><td>{record.checkOutAt ? new Date(record.checkOutAt).toLocaleTimeString() : 'Not checked out'}</td><td><div className="attendance-evidence-actions"><button className="manage-button" type="button" disabled={loadingPhotoId === `${record._id}:check-in`} onClick={() => showAttendancePhoto(record, 'check-in')}>{loadingPhotoId === `${record._id}:check-in` ? 'Loading...' : 'Check-in photo'}</button>{record.hasCheckOutPhoto && <button className="manage-button" type="button" disabled={loadingPhotoId === `${record._id}:check-out`} onClick={() => showAttendancePhoto(record, 'check-out')}>{loadingPhotoId === `${record._id}:check-out` ? 'Loading...' : 'Check-out photo'}</button>}</div></td></tr>} /></table></div> : !loading && <p className="empty-state">No employee attendance in the past 30 days.</p>}
     </section>
-    {photoUrl && <div className="modal-backdrop" role="presentation" onClick={() => setPhotoUrl('')}><section className="modal-card" role="dialog" aria-modal="true" aria-label="Attendance selfie" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">HR-ONLY ATTENDANCE EVIDENCE</span><h2>Employee check-in selfie</h2></div><button className="icon-button" type="button" aria-label="Close selfie" onClick={() => setPhotoUrl('')}><X size={18} /></button></div><img className="attendance-photo-preview" src={photoUrl} alt="Employee attendance selfie" /></section></div>}
+    {photoUrl && <div className="modal-backdrop" role="presentation" onClick={() => setPhotoUrl('')}><section className="modal-card" role="dialog" aria-modal="true" aria-label="Attendance selfie" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">HR-ONLY ATTENDANCE EVIDENCE</span><h2>{photoTitle}</h2></div><button className="icon-button" type="button" aria-label="Close selfie" onClick={() => setPhotoUrl('')}><X size={18} /></button></div><img className="attendance-photo-preview" src={photoUrl} alt={photoTitle} /></section></div>}
     <section className="bank-panel transaction-panel">
       <div className="bank-panel-heading"><div><span className="eyebrow">PEOPLE OPERATIONS</span><h2>Employee directory</h2></div><UsersRound size={22} /></div>
       <p className="form-disclaimer">HR view-only workspace: review staff role, sub-branch assignment, account access status, and account creation date. Bank Admins manage employee access and assignments.</p>
@@ -1669,15 +1672,18 @@ function HRDashboard({ token }) {
   </>;
 }
 
-function EmployeeAttendanceDashboard({ token }) {
+function EmployeeAttendanceDashboard({ token, profile }) {
   const [attendance, setAttendance] = useState([]);
   const [consent, setConsent] = useState(false);
+  const [checkOutConsent, setCheckOutConsent] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [capturePurpose, setCapturePurpose] = useState('check-in');
   const [photo, setPhoto] = useState('');
   const [stream, setStream] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [canCheckOut, setCanCheckOut] = useState(() => isKigaliCheckOutTime());
   const [notice, setNotice] = useState({ type: '', text: '' });
   const videoRef = useRef(null);
   const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Kigali', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -1697,9 +1703,14 @@ function EmployeeAttendanceDashboard({ token }) {
     if (videoRef.current && stream) videoRef.current.srcObject = stream;
   }, [stream]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setCanCheckOut(isKigaliCheckOutTime()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   useEffect(() => () => stream?.getTracks().forEach((track) => track.stop()), [stream]);
 
-  async function startCamera() {
+  async function startCamera(purpose = 'check-in') {
     setNotice({ type: '', text: '' });
     if (!navigator.mediaDevices?.getUserMedia) {
       setNotice({ type: 'error', text: 'Camera access is not available in this browser. Use a secure HTTPS connection or ask HR for help.' });
@@ -1708,6 +1719,7 @@ function EmployeeAttendanceDashboard({ token }) {
     try {
       const cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
       setStream(cameraStream);
+      setCapturePurpose(purpose);
       setCameraOpen(true);
       setPhoto('');
     } catch (error) {
@@ -1756,7 +1768,7 @@ function EmployeeAttendanceDashboard({ token }) {
       setAttendance((records) => [result.attendance, ...records]);
       setPhoto('');
       setConsent(false);
-      setNotice({ type: 'success', text: 'Attendance recorded. Your selfie is available only to HR for attendance review.' });
+      setNotice({ type: '', text: '' });
     } catch (error) {
       setNotice({ type: 'error', text: error.message });
     } finally {
@@ -1764,15 +1776,22 @@ function EmployeeAttendanceDashboard({ token }) {
     }
   }
 
-  async function submitCheckOut() {
+  async function submitCheckOut(event) {
+    event.preventDefault();
+    if (!checkOutConsent || !photo || capturePurpose !== 'check-out') {
+      setNotice({ type: 'error', text: 'Give consent and capture a selfie before recording your check-out.' });
+      return;
+    }
     setCheckingOut(true);
     setNotice({ type: '', text: '' });
     try {
-      const result = await checkOutForAttendance(token);
+      const result = await checkOutForAttendance(token, { photoConsent: true, photo });
       setAttendance((records) => records.map((record) => (
         record._id === result.attendance._id ? result.attendance : record
       )));
-      setNotice({ type: '', text: '' });
+      setPhoto('');
+      setCheckOutConsent(false);
+      setNotice({ type: 'success', text: 'Check-out recorded. Your selfie is securely stored as attendance evidence for HR.' });
     } catch (error) {
       setNotice({ type: 'error', text: error.message });
     } finally {
@@ -1786,21 +1805,30 @@ function EmployeeAttendanceDashboard({ token }) {
       { label: 'Recorded days', value: attendance.length, detail: 'Most recent 90 records' }
     ]} />
     <section className="bank-panel transaction-panel">
-      <div className="bank-panel-heading"><div><span className="eyebrow">EMPLOYEE ATTENDANCE</span><h2>Record today’s check-in</h2></div><Camera size={22} /></div>
+      <div className="bank-panel-heading"><div><span className="eyebrow">EMPLOYEE ATTENDANCE · {profile.name}</span><h2>Daily attendance</h2></div><Camera size={22} /></div>
       <p className="form-disclaimer">Your selfie is stored in authenticated Cloudinary storage and can be viewed only by HR Managers at your bank. It is used as attendance evidence only; no facial recognition or identity matching is performed. If you do not consent to photo storage, contact your HR Manager for the bank’s alternative attendance process.</p>
       {checkedInToday ? <p className="notice success" role="status">Check-in recorded for today.</p> : <form className="bank-form" onSubmit={submitCheckIn}>
         <label className="check-row"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} required /> I consent to capturing and securely storing this selfie as attendance evidence, accessible to my bank’s HR Manager.</label>
-        {cameraOpen && <div className="attendance-camera"><video ref={videoRef} autoPlay playsInline aria-label="Live selfie camera preview" /><button className="bank-button" type="button" onClick={captureSelfie}>Capture selfie</button></div>}
-        {!cameraOpen && !photo && <button className="bank-button" type="button" disabled={!consent || submitting} onClick={startCamera}><Camera size={17} /> Start camera</button>}
-        {photo && <div className="attendance-camera"><img className="attendance-photo-preview" src={photo} alt="Selfie preview before attendance submission" /><button className="manage-button" type="button" onClick={() => { setPhoto(''); startCamera(); }}>Retake selfie</button></div>}
+        {cameraOpen && capturePurpose === 'check-in' && <div className="attendance-camera"><video ref={videoRef} autoPlay playsInline aria-label="Live check-in selfie camera preview" /><button className="bank-button" type="button" onClick={captureSelfie}>Capture selfie</button></div>}
+        {!cameraOpen && !photo && <button className="bank-button" type="button" disabled={!consent || submitting} onClick={() => startCamera('check-in')}><Camera size={17} /> Start camera</button>}
+        {photo && capturePurpose === 'check-in' && <div className="attendance-camera"><img className="attendance-photo-preview" src={photo} alt="Check-in selfie preview before attendance submission" /><button className="manage-button" type="button" onClick={() => { setPhoto(''); startCamera('check-in'); }}>Retake selfie</button></div>}
         {notice.text && <Notice notice={notice} />}
         <button className="bank-button" type="submit" disabled={!consent || !photo || submitting}>{submitting ? 'Recording attendance...' : 'Record attendance'}</button>
       </form>}
-      {todayAttendance && !todayAttendance.checkOutAt && <div className="bank-form"><p className="form-disclaimer">Checked in at {new Date(todayAttendance.checkInAt).toLocaleTimeString()}.</p><button className="bank-button" type="button" onClick={submitCheckOut} disabled={checkingOut}>{checkingOut ? 'Recording check-out...' : 'Check out'}</button></div>}
+      {todayAttendance && !todayAttendance.checkOutAt && !canCheckOut && <p className="notice attendance-checkout-time" role="status">Your check-out selfie will be available from 5:00 PM Rwanda time. Your daily check-in and check-out are recorded together under the same date.</p>}
+      {todayAttendance && !todayAttendance.checkOutAt && canCheckOut && <form className="bank-form attendance-checkout-form" onSubmit={submitCheckOut}>
+        <p className="form-disclaimer">Checked in at {new Date(todayAttendance.checkInAt).toLocaleTimeString()}. A fresh selfie is required to record check-out.</p>
+        <label className="check-row"><input type="checkbox" checked={checkOutConsent} onChange={(event) => setCheckOutConsent(event.target.checked)} required /> I consent to capturing and securely storing a separate check-out selfie as attendance evidence for my bank’s HR Manager.</label>
+        {cameraOpen && capturePurpose === 'check-out' && <div className="attendance-camera"><video ref={videoRef} autoPlay playsInline aria-label="Live check-out selfie camera preview" /><button className="bank-button" type="button" onClick={captureSelfie}>Capture check-out selfie</button></div>}
+        {!cameraOpen && (!photo || capturePurpose !== 'check-out') && <button className="bank-button" type="button" disabled={!checkOutConsent || checkingOut} onClick={() => startCamera('check-out')}><Camera size={17} /> Start check-out camera</button>}
+        {photo && capturePurpose === 'check-out' && <div className="attendance-camera"><img className="attendance-photo-preview" src={photo} alt="Check-out selfie preview before attendance submission" /><button className="manage-button" type="button" onClick={() => { setPhoto(''); startCamera('check-out'); }}>Retake check-out selfie</button></div>}
+        {notice.text && <Notice notice={notice} />}
+        <button className="bank-button" type="submit" disabled={!checkOutConsent || !photo || capturePurpose !== 'check-out' || checkingOut}>{checkingOut ? 'Recording check-out...' : 'Record check-out with selfie'}</button>
+      </form>}
       {todayAttendance?.checkOutAt && <p className="form-disclaimer" role="status">Checked out at {new Date(todayAttendance.checkOutAt).toLocaleTimeString()}.</p>}
-      {notice.text && checkedInToday && <Notice notice={notice} />}
+      {notice.text && todayAttendance?.checkOutAt && <Notice notice={notice} />}
     </section>
-    <section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">HISTORY</span><h2>My attendance</h2></div><CalendarCheck size={22} /></div>{loading ? <p className="empty-state">Loading attendance history...</p> : attendance.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Date</th><th>Check-in</th><th>Check-out</th><th>Status</th></tr></thead><PaginatedRows rows={attendance} colSpan={4} renderRow={(record) => <tr key={record._id}><td>{record.dayKey}</td><td>{new Date(record.checkInAt).toLocaleTimeString()}</td><td>{record.checkOutAt ? new Date(record.checkOutAt).toLocaleTimeString() : 'Not checked out'}</td><td><span className="status verified">Present</span></td></tr>} /></table></div> : <p className="empty-state">No attendance has been recorded yet.</p>}</section>
+    <section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">HISTORY · {profile.name}</span><h2>Attendance by Rwanda-local date</h2></div><CalendarCheck size={22} /></div>{loading ? <p className="empty-state">Loading attendance history...</p> : attendance.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Date</th><th>Check-in</th><th>Check-out</th><th>Status</th></tr></thead><PaginatedRows rows={attendance} colSpan={4} renderRow={(record) => <tr key={record._id}><td>{record.dayKey}</td><td>{new Date(record.checkInAt).toLocaleTimeString()}</td><td>{record.checkOutAt ? new Date(record.checkOutAt).toLocaleTimeString() : 'Not checked out'}</td><td><span className="status verified">Present</span></td></tr>} /></table></div> : <p className="empty-state">No attendance has been recorded yet.</p>}</section>
   </>;
 }
 
@@ -2333,7 +2361,7 @@ function CustomerLoanRepayment({ application, accounts, onAccountPay, onVirtualP
     {method === 'account' ? <label>Debit account<select value={accountId} onChange={(event) => setAccountId(event.target.value)} required><option value="">Select an eligible account</option>{accounts.map((account) => <option key={account._id} value={account._id}>{account.accountName} · {account.accountNumber} · {currency(account.balance)} available</option>)}</select></label> : <><label>Virtual payment method<select value={channel} onChange={(event) => setChannel(event.target.value)}><option value="mtn_mobile_money">MTN Mobile Money (simulation)</option><option value="airtel_mobile_money">Airtel Money (simulation)</option><option value="bank_transfer">Bank transfer (simulation)</option><option value="virtual_account">Virtual account (simulation)</option></select></label><label className="check-row"><input type="checkbox" checked={simulateFailure} onChange={(event) => setSimulateFailure(event.target.checked)} /> Simulate a declined payment (test only)</label></>}
     {notice.text && <Notice notice={notice} />}
     <p className="form-disclaimer">{method === 'account' ? 'Your selected account will be debited immediately. The account must have sufficient available funds.' : 'Demo only: a successful test updates the loan ledger and issues a receipt. It does not debit an account or transfer real money.'}</p>
-    <button className="bank-button" type="submit" disabled={submitting || (method === 'account' && (!accounts.length || !accountId))}>{submitting ? 'Processing...' : method === 'account' ? 'Pay loan from account' : 'Make virtual repayment'}</button>
+    <button className="bank-button" type="submit" disabled={submitting || (method === 'account' && (!accounts.length || !accountId))}>{submitting ? 'Processing payment...' : 'Pay Loan'}</button>
   </form>;
 }
 
@@ -2392,6 +2420,18 @@ function calculateLoanQuote(principal, annualRate, termMonths) {
 }
 
 function LoanMoney({ amount }) { return <span className="loan-money"><img src="/rf-currency.svg" alt="Rwandan franc" />{currency(amount)}</span>; }
+
+function isKigaliCheckOutTime(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Africa/Kigali',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value);
+  return hour * 60 + minute >= 17 * 60;
+}
 
 function currency(amount) { return new Intl.NumberFormat('rw-RW', { style: 'currency', currency: 'RWF', maximumFractionDigits: 0 }).format(amount || 0); }
 

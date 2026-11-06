@@ -406,10 +406,10 @@ body { background: #eef4ff; color: var(--ink); }
 .dashboard-shell .sidebar .nav-item, .dashboard-shell .sidebar .logout-item { color: #d2e3ff; }
 .dashboard-shell .sidebar .nav-item:hover, .dashboard-shell .sidebar .nav-item.active { color: #fff; background: linear-gradient(90deg, rgba(75, 151, 255, .34), rgba(75, 151, 255, .1)); }
 .dashboard-shell .sidebar .logout-item { border-top-color: rgba(255, 255, 255, .12); }
-.dashboard-shell .bank-shell { color: var(--ink); background: #eef4ff; }
-.dashboard-shell .bank-shell .topbar { color: var(--ink); border-color: #d7e3f7; background: rgba(255, 255, 255, .9); }
-.dashboard-shell .bank-shell .topbar-user { color: #53698f; }
-.dashboard-shell .bank-shell .topbar .icon-button { color: #21436f; border-color: #d5e0f2; background: #fff; }
+.dashboard-shell.bank-shell { color: var(--ink); background: #eef4ff; }
+.dashboard-shell.bank-shell .topbar { color: var(--ink); border-color: #d7e3f7; background: rgba(255, 255, 255, .9); }
+.dashboard-shell.bank-shell .topbar-user { color: #53698f; }
+.dashboard-shell.bank-shell .topbar .icon-button { color: #21436f; border-color: #d5e0f2; background: #fff; }
 .dashboard-shell .bank-dashboard { color: var(--ink); }
 .dashboard-shell .bank-dashboard .welcome-row h1 { color: #10254d; }
 .dashboard-shell .bank-dashboard .welcome-row h1 em { color: #1558cf; }
@@ -426,6 +426,10 @@ body { background: #eef4ff; color: var(--ink); }
 .dashboard-shell .bank-stats article { border-color: #d7e3f7; background: #fff; }
 .dashboard-shell .bank-stats article > span, .dashboard-shell .bank-stats article > small { color: #53698f; }
 .dashboard-shell .bank-stats article > strong { color: #10254d; }
+.dashboard-shell .stats-grid .stat-card { color: #10254d; border: 1px solid #d7e3f7; border-top: 4px solid #1558cf; background: #fff; box-shadow: 0 8px 26px rgba(15, 54, 119, .06); }
+.dashboard-shell .stats-grid .stat-card.green, .dashboard-shell .stats-grid .stat-card.orange, .dashboard-shell .stats-grid .stat-card.blue { border-color: #d7e3f7; border-top-color: #1558cf; }
+.dashboard-shell .stats-grid .stat-label, .dashboard-shell .stats-grid .stat-card small { color: #53698f; }
+.dashboard-shell .stats-grid .stat-menu { color: #1558cf; background: #e7f0ff; }
 .dashboard-shell .bank-stats .balance-stat { border-left-color: #1558cf; }
 .dashboard-shell .bank-stats .balance-stat > strong { color: #1558cf; }
 .dashboard-shell .bank-button, .dashboard-shell .create-user-submit, .guest-dashboard-shell .bank-button {
@@ -483,6 +487,10 @@ body { background: #eef4ff; color: var(--ink); }
 .dashboard-shell .customer-repayment-form input:focus, .dashboard-shell .customer-repayment-form select:focus { outline: 2px solid rgba(57, 134, 255, .15); border-color: #3986ff; }
 .dashboard-shell .customer-payment-receipts { border-top-color: #e5edf9; }
 .dashboard-shell .loan-repayment-intro { margin: -8px 0 16px; font-size: 12px; line-height: 1.6; }
+.dashboard-shell .attendance-checkout-form { margin-top: 16px; padding-top: 16px; border-top: 1px solid #d7e3f7; }
+.dashboard-shell .attendance-evidence-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.dashboard-shell .attendance-evidence-actions .manage-button { color: #1558cf; border-color: #c7d9f6; background: #eef4ff; }
+.dashboard-shell .attendance-evidence-actions .manage-button:hover:not(:disabled) { background: #dceaff; }
 .dashboard-shell .bank-panel .empty-state, .dashboard-shell .bank-dashboard .empty-state { color: #64799d; }
 .guest-dashboard-shell .financial-positive, .dashboard-shell .financial-positive { color: #1558cf; }
 .dashboard-shell .mobile-menu { color: #1558cf; }

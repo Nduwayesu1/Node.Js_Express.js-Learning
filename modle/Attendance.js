@@ -11,7 +11,9 @@ const attendanceSchema = new Schema({
     checkOutAt: { type: Date },
     status: { type: String, enum: ['present'], required: true, default: 'present' },
     photoConsentAt: { type: Date, required: true },
+    checkOutPhotoConsentAt: { type: Date },
     photoPublicId: { type: String, select: false },
+    checkOutPhotoPublicId: { type: String, select: false },
     photoCiphertext: { type: Buffer, select: false },
     photoIv: { type: Buffer, select: false },
     photoAuthTag: { type: Buffer, select: false }
