@@ -71,6 +71,41 @@ const bankAccountSchema = new Schema(
             required: true,
             trim: true
         },
+        identityDocumentType: {
+            type: String,
+            enum: ['national_id', 'passport']
+        },
+        identityDocumentPublicId: {
+            type: String,
+            select: false
+        },
+        identityDocumentFormat: {
+            type: String,
+            enum: ['jpg', 'png', 'pdf'],
+            select: false
+        },
+        identityDocumentUploadedAt: {
+            type: Date,
+            select: false
+        },
+        identityDocumentViewedAt: {
+            type: Date,
+            select: false
+        },
+        identityDocumentViewedBy: {
+            type: Schema.Types.ObjectId,
+            ref: 'User',
+            select: false
+        },
+        identityDocumentReviewedAt: {
+            type: Date,
+            select: false
+        },
+        identityDocumentReviewedBy: {
+            type: Schema.Types.ObjectId,
+            ref: 'User',
+            select: false
+        },
         balance: {
             type: Number,
             default: 0,
@@ -78,7 +113,7 @@ const bankAccountSchema = new Schema(
         },
         status: {
             type: String,
-            enum: ['active', 'inactive'],
+            enum: ['pending', 'active', 'inactive'],
             default: 'active'
         },
         pendingPaymentId: {

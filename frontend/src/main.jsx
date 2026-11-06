@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ArrowDownToLine, ArrowRight, AtSign, Bell, Building2, CalendarCheck, Camera, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Clock3, HandCoins, LayoutDashboard, LockKeyhole, LogOut, Menu, MessageSquareText, ShieldCheck, UserPlus, UserRound, UsersRound, Wallet, X } from 'lucide-react';
-import { activateBankMember, activateBankStaff, activateUser, addBankBranch, checkInForAttendance, checkOutForAttendance, confirmPasswordReset, createBank, createBankAccount, createBankAdmin, createBankMember, createBankStaff, createLoan, createPayrollBatch, deactivateBankMember, deactivateBankStaff, decideLoan, deleteUser, depositToBankAccount, getAssignedBank, getAttendancePhoto, getAvailableBanks, getBankAccountTransactions, getBankAccounts, getBankAttendance, getBankMembers, getBankStaff, getBanks, getFinanceBanks, getGuestFeedback, getLoans, getMyAttendance, getMyBankAccounts, getPayrollBatches, getPayrollEmployees, getProfile, getRwandaCells, getRwandaDistricts, getRwandaProvinces, getRwandaSectors, getRwandaVillages, getUsers, login, markGuestFeedbackReviewed, markLoanDefaulted, payLoanFromAccount, payLoanWithVirtualSimulator, recordLoanRepayment, requestPasswordReset, resendOtp, searchTransferRecipients, submitGuestFeedback, transferBetweenAccounts, updateBankAccountStatus, updateProfile, updateUser, verifyOtp } from './api';
+import { activateBankMember, activateBankStaff, activateUser, addBankBranch, checkInForAttendance, checkOutForAttendance, confirmPasswordReset, createBank, createBankAccount, createBankAdmin, createBankMember, createBankStaff, createLoan, createPayrollBatch, deactivateBankMember, deactivateBankStaff, decideLoan, deleteUser, depositToBankAccount, getAssignedBank, getAttendancePhoto, getAvailableBanks, getBankAccountIdentityDocument, getBankAccountTransactions, getBankAccounts, getBankAttendance, getBankMembers, getBankStaff, getBanks, getFinanceBanks, getGuestFeedback, getLoans, getMyAttendance, getMyBankAccounts, getPayrollBatches, getPayrollEmployees, getProfile, getRwandaCells, getRwandaDistricts, getRwandaProvinces, getRwandaSectors, getRwandaVillages, getUsers, login, markGuestFeedbackReviewed, markLoanDefaulted, payLoanFromAccount, payLoanWithVirtualSimulator, recordLoanRepayment, requestPasswordReset, resendOtp, searchTransferRecipients, submitGuestFeedback, transferBetweenAccounts, updateBankAccountStatus, updateProfile, updateUser, verifyOtp } from './api';
 import './styles.css';
 
 const initialForm = { email: '', password: '' };
@@ -345,13 +345,29 @@ function App() {
       <div className="mountains mountain-back" />
       <div className="mountains mountain-front" />
       <section className="auth-layout">
+        <header className="auth-topbar">
+          <a className="auth-brand" href="#home" aria-label="Loan banking home">
+            <img className="brand-logo" src="/e-banking-payment.svg" alt="" />
+            <span>LOAN<small>PERSONAL BANKING</small></span>
+          </a>
+          <nav aria-label="Main navigation">
+            <a href="#home">Home</a>
+            <a href="#login-panel">Account access</a>
+            <a href="#login-panel">Open an account</a>
+          </nav>
+          <a className="auth-secure-link" href="#login-panel">Secure sign in <ArrowRight size={15} /></a>
+        </header>
         <div className="brand-copy">
-          <div className="brand-mark"><img className="brand-logo" src="/e-banking-payment.svg" alt="E-banking payment" /><span>LOAN</span></div>
-          <h1>Financial tools<br />built for <em>growth.</em></h1>
-          <p>Manage your accounts, track loan applications, and make secure payments in one place.</p>
+          <span className="hero-kicker"><ShieldCheck size={15} /> Banking made for your next chapter</span>
+          <h1 id="home">Your financial<br />journey, <em>made easier.</em></h1>
+          <p>Access your accounts, follow loan requests, and make secure payments from one trusted place.</p>
+          <div className="auth-hero-actions">
+            <a className="auth-primary-link" href="#login-panel">Access your account <ArrowRight size={16} /></a>
+            <span>New here? Sign in to request a personal account.</span>
+          </div>
           <div className="trust-line"><ShieldCheck size={17} /> Secure account access</div>
         </div>
-        <section className="auth-card">
+        <section className="auth-card" id="login-panel">
           {view === 'otp'
             ? <OtpForm otp={otp} setOtp={setOtp} email={form.email} loading={loading} notice={notice} onSubmit={handleVerify} onResend={async () => { setLoading(true); try { await resendOtp(form.email); setNotice({ type: 'success', text: 'A new verification code has been sent.' }); } catch (error) { showError(error); } finally { setLoading(false); } }} onBack={() => setView('login')} />
             : view === 'reset'
@@ -562,6 +578,40 @@ function Notice({ notice }) {
   </div>;
 }
 
+function downloadLoanReceipt(application, payment) {
+  const receiptNumber = payment.receiptNumber || 'Receipt unavailable';
+  const paymentDate = payment.paidAt || payment.processedAt;
+  const paymentMode = payment.paymentMode || payment.mode;
+  const receiptLines = [
+    'LOAN REPAYMENT RECEIPT',
+    `Receipt number: ${receiptNumber}`,
+    `Borrower: ${application.applicantName || application.applicantEmail || 'Individual borrower'}`,
+    `Bank: ${application.bankName || 'N/A'}`,
+    `Sub-branch: ${application.branchName || 'N/A'}`,
+    `Loan purpose: ${application.purpose || 'N/A'}`,
+    `Loan application: ${application._id || 'N/A'}`,
+    `Payment date: ${paymentDate ? new Date(paymentDate).toLocaleString() : 'N/A'}`,
+    `Amount: ${currency(payment.amount)}`,
+    `Payment method: ${payment.paymentChannel || payment.channel || 'N/A'}`,
+    `Payment type: ${paymentMode === 'virtual_simulation' || paymentMode === 'simulation' ? 'Virtual simulation (no real funds moved)' : paymentMode === 'account_transfer' ? 'Borrower bank account' : paymentMode || 'N/A'}`,
+    `Reference: ${payment.paymentReference || payment.reference || 'N/A'}`,
+    ...(Number.isFinite(payment.interestPortion) ? [`Interest paid: ${currency(payment.interestPortion)}`] : []),
+    ...(Number.isFinite(payment.principalPortion) ? [`Principal paid: ${currency(payment.principalPortion)}`] : []),
+    '',
+    'Keep this receipt for your records.'
+  ];
+  const receiptBlob = new Blob([receiptLines.join('\r\n')], { type: 'text/plain;charset=utf-8' });
+  const receiptUrl = URL.createObjectURL(receiptBlob);
+  const safeReceiptNumber = String(payment.receiptNumber || 'loan-repayment').replace(/[^\w-]/g, '_');
+  const downloadLink = document.createElement('a');
+  downloadLink.href = receiptUrl;
+  downloadLink.download = `${safeReceiptNumber}.txt`;
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  downloadLink.remove();
+  window.setTimeout(() => URL.revokeObjectURL(receiptUrl), 1000);
+}
+
 function Dashboard({ profile, users, banks, token, pagination, userQuery, setUserQuery, onActivateUser, onRoleUpdate, onUserCreated, onBankCreated, onRefreshBanks, section, setSection, sidebarOpen, setSidebarOpen, form, loading, notice, setNotice, activityItems, setActivityItems, onActivity, setForm, onSave, onLogout, loanApplications, systemAnnualInterestRate, onLoanApplication, onLoanDecision, onLoanRepayment, onVirtualLoanPayment, onAccountLoanPayment, onLoanDefault }) {
   const firstName = profile.name?.split(' ')[0] || 'there';
   const manager = profile.role === 'employee';
@@ -576,7 +626,7 @@ function Dashboard({ profile, users, banks, token, pagination, userQuery, setUse
   const bankView = profile.role === 'user' || manager || (profile.role === 'admin' && ['deposits', 'applications', 'banks'].includes(section));
   return <main className={`dashboard-shell ${bankView ? 'bank-shell' : ''}`}>
     <Sidebar profile={profile} staffRole={staffRole} section={section} setSection={setSection} open={sidebarOpen} setOpen={setSidebarOpen} onLogout={onLogout} /><div className="dashboard-main"><header className="topbar"><button className="mobile-menu" onClick={() => setSidebarOpen(true)} title="Open navigation"><Menu size={20} /></button><div className="topbar-actions"><div className="topbar-user"><span>{profile.email}</span><button className="icon-button" title="Sign out" onClick={onLogout}><LogOut size={18} /></button></div><NotificationCenter items={activityItems} setItems={setActivityItems} /></div></header>{notice.type === 'error' && notice.text && <div className="system-error" role="alert">{notice.text}</div>}
-    <section className={`dashboard-content ${bankView ? 'bank-dashboard' : ''}`}><div className="welcome-row"><div><span className="eyebrow">{manager ? staffRoleLabel.toUpperCase() : profile.role.toUpperCase()} WORKSPACE</span><h1>Welcome, <em>{firstName}</em> <span className="wave">✦</span></h1></div><div className="role-pill"><ShieldCheck size={15} /> {manager ? staffRoleLabel : profile.role}</div></div>
+    <section className={`dashboard-content ${bankView ? 'bank-dashboard' : ''} ${profile.role === 'user' ? 'customer-account-dashboard' : ''}`}><div className="welcome-row"><div><span className="eyebrow">{manager ? staffRoleLabel.toUpperCase() : profile.role.toUpperCase()} WORKSPACE</span><h1>Welcome, <em>{firstName}</em> <span className="wave">✦</span></h1></div><div className="role-pill"><ShieldCheck size={15} /> {manager ? staffRoleLabel : profile.role}</div></div>
       {profile.role === 'admin' && ['overview', 'users'].includes(section) && <AdminCreateBankAdmin banks={banks} onCreated={onUserCreated} onActivity={onActivity} />}
       {profile.role === 'admin' && !['deposits', 'applications', 'banks', 'feedback'].includes(section) && <AdminDashboard users={users} pagination={pagination} query={userQuery} setQuery={setUserQuery} onActivateUser={onActivateUser} onRoleUpdate={onRoleUpdate} onUserCreated={onUserCreated} section={section} />}
       {profile.role === 'admin' && section === 'users' && <AdminEmployeeAccess users={users} banks={banks} currentUserId={profile._id} onRoleUpdate={onRoleUpdate} />}
@@ -590,6 +640,7 @@ function Dashboard({ profile, users, banks, token, pagination, userQuery, setUse
       {manager && staffRole === 'hr_manager' && section === 'hr-dashboard' && <HRDashboard token={token} />}
       {manager && section === 'attendance' && <EmployeeAttendanceDashboard token={token} profile={profile} />}
       {manager && section === 'my-loans' && <EmployeeLoanDashboard profile={profile} applications={loanApplications} banks={banks} token={token} systemAnnualInterestRate={systemAnnualInterestRate} onLoanApplication={onLoanApplication} onVirtualLoanPayment={onVirtualLoanPayment} onAccountLoanPayment={onAccountLoanPayment} />}
+      {manager && section === 'my-accounts' && <EmployeeAccountsDashboard profile={profile} banks={banks} token={token} />}
       {manager && staffRole === 'finance_manager' && section === 'directory' && <BankStaffDirectoryDashboard token={token} />}
       {manager && staffRole === 'general_manager' && section === 'overview' && <GeneralManagerDashboard banks={banks} token={token} loanApplications={loanApplications} />}
       {manager && staffRole === 'finance_manager' && section === 'payroll' && <FinancePayrollDashboard banks={banks} token={token} onActivity={onActivity} />}
@@ -706,7 +757,7 @@ function EmployeeAccessRow({ user, banks, currentUserId, onRoleUpdate }) {
 function Sidebar({ profile, staffRole, section, setSection, open, setOpen, onLogout }) {
   const go = (next) => { setSection(next); setOpen(false); };
   const navigation = profile.role === 'employee'
-    ? [{ section: 'attendance', label: 'My attendance', icon: CalendarCheck }, { section: 'my-loans', label: 'My loans', icon: HandCoins }]
+    ? [{ section: 'attendance', label: 'My attendance', icon: CalendarCheck }, { section: 'my-loans', label: 'My loans', icon: HandCoins }, { section: 'my-accounts', label: 'My accounts', icon: Building2 }]
     : [{ section: 'overview', label: 'Dashboard', icon: LayoutDashboard }];
   if (profile.role === 'user') navigation.push(
     { section: 'deposit', label: 'Make a deposit', icon: ArrowDownToLine },
@@ -1944,7 +1995,7 @@ function EmployeeLoanDashboard({ profile, applications, banks, token, systemAnnu
         <div className="customer-loan-summary"><strong><LoanMoney amount={application.amount} /> · {application.bankName}</strong><small>{application.purpose} · {application.branchName} · {application.termMonths} months</small>{application.annualInterestRate !== undefined && <small>{application.annualInterestRate}% annual interest · {currency(application.monthlyPayment)} estimated monthly payment</small>}<small>Outstanding principal: {currency(application.outstandingPrincipal)} · {currency(application.interestIncome)} interest paid</small></div>
         <span className={`loan-status ${application.status}`}>{application.status}</span>
         {application.status === 'approved' && <CustomerLoanRepayment application={application} accounts={eligibleLoanAccounts(application)} onAccountPay={onAccountLoanPayment} onVirtualPay={onVirtualLoanPayment} onAccountsRefresh={async () => { const { accounts: refreshedAccounts } = await getMyBankAccounts(token); setAccounts(refreshedAccounts || []); }} />}
-        {application.repayments?.length > 0 && <div className="customer-payment-receipts">{application.repayments.slice(-3).reverse().map((item, index) => <div key={`${application._id}-receipt-${index}`}><strong>{currency(item.amount)} · {new Date(item.paidAt).toLocaleDateString()}</strong><small>{item.receiptNumber ? `Receipt ${item.receiptNumber} · ` : ''}{item.paymentMode === 'virtual_simulation' ? 'Virtual simulation' : item.paymentMode === 'account_transfer' ? 'Paid from bank account' : 'Received by bank staff'}{item.paymentChannel ? ` · ${item.paymentChannel.replaceAll('_', ' ')}` : ''}</small></div>)}</div>}
+        {application.repayments?.length > 0 && <div className="customer-payment-receipts">{[...application.repayments].reverse().map((item, index) => <div key={`${application._id}-receipt-${index}`}><strong>{currency(item.amount)} · {new Date(item.paidAt).toLocaleDateString()}</strong><small>{item.receiptNumber ? `Receipt ${item.receiptNumber} · ` : ''}{item.paymentMode === 'virtual_simulation' ? 'Virtual simulation' : item.paymentMode === 'account_transfer' ? 'Paid from bank account' : 'Received by bank staff'}{item.paymentChannel ? ` · ${item.paymentChannel.replaceAll('_', ' ')}` : ''}</small><button className="manage-button customer-receipt-download" type="button" onClick={() => downloadLoanReceipt(application, item)}><ArrowDownToLine size={14} /> Download receipt</button></div>)}</div>}
       </article>)}</div> : <p className="empty-state">No loans are linked to your employee account.</p>}
     </section>
   </>;
@@ -2006,9 +2057,18 @@ function staffRoleName(role) {
 
 function BankAccountManagementTable({ accounts, setAccounts, token, banks, canManageAccounts = false, onActivity }) {
   const [busyAccountId, setBusyAccountId] = useState('');
+  const [openingDocumentId, setOpeningDocumentId] = useState('');
   const [notice, setNotice] = useState({ type: '', text: '' });
+  const [reviewedAccountIds, setReviewedAccountIds] = useState(() => new Set());
+  const [previewDocument, setPreviewDocument] = useState(null);
   const activeAccounts = accounts.filter((account) => account.status === 'active');
+  const pendingAccounts = accounts.filter((account) => account.status === 'pending');
   const totalBalance = accounts.reduce((total, account) => total + Number(account.balance || 0), 0);
+
+  useEffect(() => {
+    if (!previewDocument?.url) return undefined;
+    return () => URL.revokeObjectURL(previewDocument.url);
+  }, [previewDocument]);
 
   async function toggleStatus(account) {
     const status = account.status === 'active' ? 'inactive' : 'active';
@@ -2026,7 +2086,21 @@ function BankAccountManagementTable({ accounts, setAccounts, token, banks, canMa
     }
   }
 
-  return <><ReportCards items={[{ label: 'Accounts', value: accounts.length, detail: `${activeAccounts.length} active · ${accounts.length - activeAccounts.length} inactive` }, { label: 'Total balances', value: currency(totalBalance), detail: 'Across listed accounts' }, { label: 'Average balance', value: currency(accounts.length ? totalBalance / accounts.length : 0), detail: 'Per bank account' }]} /><section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">ACCOUNT MANAGEMENT</span><h2>Bank accounts</h2></div><Building2 size={22} /></div>{notice.text && <div className="bank-notice"><Notice notice={notice} /></div>}{accounts.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Account</th><th>Customer</th><th>Bank</th><th>Balance</th><th>Status</th>{canManageAccounts && <th>Action</th>}</tr></thead><PaginatedRows rows={accounts} colSpan={canManageAccounts ? 6 : 5} renderRow={(account) => <tr key={account._id}><td>{account.accountNumber}<br /><small>{account.accountName}</small></td><td>{account.userId?.name || 'Customer'}<br /><small>{account.userId?.email}</small></td><td>{account.bankId?.bankName || banks.find((bank) => String(bank._id) === String(account.bankId))?.bankName || 'Bank'}</td><td>{currency(account.balance)}</td><td><span className={`status ${account.status === 'active' ? 'verified' : ''}`}>{account.status}</span></td>{canManageAccounts && <td><button className={account.status === 'active' ? 'delete-button' : 'activate-button'} type="button" disabled={busyAccountId === account._id} onClick={() => toggleStatus(account)}>{busyAccountId === account._id ? 'Saving...' : account.status === 'active' ? 'Deactivate' : 'Activate'}</button></td>}</tr>} /></table></div> : <p className="empty-state">No bank accounts are available for this sub-branch.</p>}</section></>;
+  async function reviewIdentityDocument(account) {
+    setOpeningDocumentId(account._id);
+    setNotice({ type: '', text: '' });
+    try {
+      const documentBlob = await getBankAccountIdentityDocument(token, account._id);
+      setReviewedAccountIds((current) => new Set(current).add(account._id));
+      setPreviewDocument({ url: URL.createObjectURL(documentBlob), type: documentBlob.type });
+    } catch (error) {
+      setNotice({ type: 'error', text: error.message });
+    } finally {
+      setOpeningDocumentId('');
+    }
+  }
+
+  return <><ReportCards items={[{ label: 'Accounts', value: accounts.length, detail: `${activeAccounts.length} active · ${pendingAccounts.length} pending review` }, { label: 'Total balances', value: currency(totalBalance), detail: 'Across listed accounts' }, { label: 'Average balance', value: currency(accounts.length ? totalBalance / accounts.length : 0), detail: 'Per bank account' }]} /><section className="bank-panel transaction-panel"><div className="bank-panel-heading"><div><span className="eyebrow">ACCOUNT MANAGEMENT</span><h2>Bank accounts</h2></div><Building2 size={22} /></div>{notice.text && <div className="bank-notice"><Notice notice={notice} /></div>}{accounts.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Account</th><th>Customer</th><th>Bank</th>{canManageAccounts && <th>Identity document</th>}<th>Balance</th><th>Status</th>{canManageAccounts && <th>Action</th>}</tr></thead><PaginatedRows rows={accounts} colSpan={canManageAccounts ? 7 : 5} renderRow={(account) => <tr key={account._id}><td>{account.accountNumber}<br /><small>{account.accountName}</small></td><td>{account.userId?.name || 'Customer'}<br /><small>{account.userId?.email}</small></td><td>{account.bankId?.bankName || banks.find((bank) => String(bank._id) === String(account.bankId))?.bankName || 'Bank'}</td>{canManageAccounts && <td>{account.identityDocumentType ? account.identityDocumentType === 'national_id' ? 'National ID' : 'Passport' : 'Not submitted'}</td>}<td>{currency(account.balance)}</td><td><span className={`status ${account.status === 'active' ? 'verified' : account.status === 'pending' ? 'pending' : ''}`}>{account.status}</span></td>{canManageAccounts && <td className="account-review-actions">{account.status === 'pending' && <><button className="manage-button" type="button" disabled={openingDocumentId === account._id} onClick={() => reviewIdentityDocument(account)}>{openingDocumentId === account._id ? 'Opening...' : reviewedAccountIds.has(account._id) ? 'View ID again' : 'View ID'}</button><button className="activate-button" type="button" disabled={busyAccountId === account._id || !reviewedAccountIds.has(account._id)} onClick={() => toggleStatus(account)}>{busyAccountId === account._id ? 'Saving...' : 'Approve account'}</button></>}{account.status !== 'pending' && <button className={account.status === 'active' ? 'delete-button' : 'activate-button'} type="button" disabled={busyAccountId === account._id} onClick={() => toggleStatus(account)}>{busyAccountId === account._id ? 'Saving...' : account.status === 'active' ? 'Deactivate' : 'Activate'}</button>}</td>}</tr>} /></table></div> : <p className="empty-state">No bank accounts are available for this sub-branch.</p>}</section>{previewDocument && <div className="modal-backdrop" onClick={() => setPreviewDocument(null)}><section className="modal-card identity-document-preview" role="dialog" aria-modal="true" aria-labelledby="identity-document-title" onClick={(event) => event.stopPropagation()}><header className="modal-heading"><div><span className="eyebrow">PRIVATE IDENTITY DOCUMENT</span><h2 id="identity-document-title">Applicant document</h2></div><button className="user-action-cancel" type="button" onClick={() => setPreviewDocument(null)}>Close</button></header>{previewDocument.type === 'application/pdf' ? <iframe title="Applicant identity document" src={previewDocument.url} /> : <img src={previewDocument.url} alt="Applicant identity document" />}</section></div>}</>;
 }
 
 function StatCard({ label, value, detail, tone = 'violet' }) { return <article className={`stat-card ${tone}`}><div className="stat-label">{label}<span className="stat-menu">...</span></div><strong>{value}</strong><small>{detail}</small></article>; }
@@ -2155,23 +2229,166 @@ function LoanApplicationCard({ application, systemAnnualInterestRate, readOnly =
   </tr>;
 }
 
+function EmployeeAccountsDashboard({ profile, banks, token }) {
+  const [accounts, setAccounts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const activeAccounts = accounts.filter((account) => account.status === 'active');
+  const balance = activeAccounts.reduce((total, account) => total + Number(account.balance || 0), 0);
+
+  useEffect(() => {
+    let active = true;
+    getMyBankAccounts(token)
+      .then(({ accounts: loadedAccounts }) => { if (active) setAccounts(loadedAccounts || []); })
+      .catch((loadError) => { if (active) setError(loadError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [token]);
+
+  return <>
+    <div className="bank-stats"><article className="balance-stat"><span>Available balance</span><strong>{currency(balance)}</strong><small>Active personal accounts only</small></article><article><span>My accounts</span><strong>{loading ? '—' : accounts.length}</strong><small>{activeAccounts.length} active</small></article><article><span>Pending review</span><strong>{accounts.filter((account) => account.status === 'pending').length}</strong><small>Awaiting identity verification</small></article></div>
+    {error && <Notice notice={{ type: 'error', text: error }} />}
+    <PersonalAccountOpeningForm
+      profile={profile}
+      banks={banks}
+      token={token}
+      accounts={accounts}
+      onAccountCreated={(account) => setAccounts((current) => [account, ...current])}
+    />
+  </>;
+}
+
+function PersonalAccountOpeningForm({ profile, banks, token, accounts, onAccountCreated, onRefreshBanks }) {
+  const [accountForm, setAccountForm] = useState({
+    bankId: '',
+    branchId: '',
+    accountName: `${profile.name || 'My'} account`,
+    identityDocumentType: 'national_id'
+  });
+  const [identityDocumentFile, setIdentityDocumentFile] = useState(null);
+  const [identityConsent, setIdentityConsent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [refreshingBanks, setRefreshingBanks] = useState(false);
+  const [notice, setNotice] = useState({ type: '', text: '' });
+  const selectedBank = banks.find((bank) => String(bank._id) === accountForm.bankId);
+  const branches = selectedBank?.branches?.filter((branch) => /^[\da-f]{24}$/i.test(String(branch._id || ''))) || [];
+
+  function chooseDocument(event) {
+    const file = event.target.files?.[0] || null;
+    if (!file) {
+      setIdentityDocumentFile(null);
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'application/pdf'].includes(file.type)) {
+      setIdentityDocumentFile(null);
+      event.target.value = '';
+      setNotice({ type: 'error', text: 'Choose a JPEG, PNG, or PDF image of your National ID or passport.' });
+      return;
+    }
+    if (file.size > 1.4 * 1024 * 1024) {
+      setIdentityDocumentFile(null);
+      event.target.value = '';
+      setNotice({ type: 'error', text: 'The ID document must be smaller than 1.4 MB.' });
+      return;
+    }
+    setIdentityDocumentFile(file);
+    setNotice({ type: '', text: '' });
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    if (!identityDocumentFile) {
+      setNotice({ type: 'error', text: 'Upload a clear image or PDF of your National ID or passport.' });
+      return;
+    }
+    if (!identityConsent) {
+      setNotice({ type: 'error', text: 'Confirm that your identity document may be securely stored and reviewed by the assigned bank.' });
+      return;
+    }
+    setSubmitting(true);
+    setNotice({ type: '', text: '' });
+    try {
+      const identityDocument = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === 'string'
+          ? resolve(reader.result)
+          : reject(new Error('Unable to read the selected identity document.'));
+        reader.onerror = () => reject(new Error('Unable to read the selected identity document.'));
+        reader.readAsDataURL(identityDocumentFile);
+      });
+      const { account, message } = await createBankAccount(token, {
+        bankId: accountForm.bankId,
+        branchId: accountForm.branchId,
+        accountName: accountForm.accountName.trim(),
+        identityDocumentType: accountForm.identityDocumentType,
+        identityDocument
+      });
+      onAccountCreated({ ...account, bankId: banks.find((bank) => String(bank._id) === String(account.bankId)) || account.bankId });
+      setAccountForm((current) => ({ ...current, branchId: '', accountName: `${profile.name || 'My'} account` }));
+      setIdentityDocumentFile(null);
+      setIdentityConsent(false);
+      formElement.reset();
+      setNotice({ type: 'success', text: `${message} Account number: ${account.accountNumber}.` });
+    } catch (error) {
+      setNotice({ type: 'error', text: error.message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return <section className="bank-panel customer-open-account" id="customer-account-opening">
+    <div className="bank-panel-heading">
+      <div><span className="eyebrow">PERSONAL ACCOUNT</span><h2>Open a bank account</h2></div>
+      {onRefreshBanks && <button className="text-button" type="button" disabled={refreshingBanks} onClick={async () => {
+        setRefreshingBanks(true);
+        try {
+          await onRefreshBanks();
+        } finally {
+          setRefreshingBanks(false);
+        }
+      }}>{refreshingBanks ? 'Loading banks...' : 'Refresh banks'}</button>}
+    </div>
+    <p className="form-disclaimer">Upload your National ID or passport. Your account stays pending until an authorized Accounts Manager verifies your document. The ID file is stored privately and is not included in account lists.</p>
+    {notice.text && <div className="bank-notice"><Notice notice={notice} /></div>}
+    <form className="bank-form" onSubmit={submit}>
+      <label htmlFor="bank-account-bank">Bank</label>
+      <select className="bank-text-input" id="bank-account-bank" value={accountForm.bankId} onChange={(event) => setAccountForm({ ...accountForm, bankId: event.target.value, branchId: '' })} required>
+        <option value="">Select a bank</option>{banks.map((bank) => <option key={bank._id} value={bank._id}>{bank.bankName}{bank.accountNumber ? ` · ${bank.accountNumber}` : ''}</option>)}
+      </select>
+      <label htmlFor="bank-account-branch">Sub-branch</label>
+      <select className="bank-text-input" id="bank-account-branch" value={accountForm.branchId} onChange={(event) => setAccountForm({ ...accountForm, branchId: event.target.value })} required disabled={!branches.length}>
+        <option value="">{selectedBank ? branches.length ? 'Select a sub-branch' : 'No sub-branches available' : 'Select a bank first'}</option>{branches.map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName}{branch.branchCode ? ` · ${branch.branchCode}` : ''}</option>)}
+      </select>
+      <label htmlFor="bank-account-name">Account name</label>
+      <input className="bank-text-input" id="bank-account-name" value={accountForm.accountName} onChange={(event) => setAccountForm({ ...accountForm, accountName: event.target.value })} maxLength="80" required />
+      <label htmlFor="identity-document-type">Identity document</label>
+      <select className="bank-text-input" id="identity-document-type" value={accountForm.identityDocumentType} onChange={(event) => setAccountForm({ ...accountForm, identityDocumentType: event.target.value })} required>
+        <option value="national_id">National ID</option><option value="passport">Passport</option>
+      </select>
+      <label htmlFor="identity-document-file">Upload {accountForm.identityDocumentType === 'passport' ? 'passport' : 'National ID'} (JPEG, PNG, or PDF · max 1.4 MB)</label>
+      <input className="bank-text-input identity-document-input" id="identity-document-file" type="file" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={chooseDocument} required />
+      {identityDocumentFile && <p className="form-disclaimer">Selected: {identityDocumentFile.name}</p>}
+      <label className="check-row"><input type="checkbox" checked={identityConsent} onChange={(event) => setIdentityConsent(event.target.checked)} required /> I consent to the secure storage and review of this identity document by the Accounts Manager responsible for the selected sub-branch.</label>
+      <button className="bank-button" type="submit" disabled={submitting}>{submitting ? 'Submitting account request...' : 'Submit account request'}</button>
+    </form>
+    {accounts.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Account</th><th>Bank</th><th>Status</th><th>Available balance</th></tr></thead><PaginatedRows rows={accounts} colSpan={4} renderRow={(account) => <tr key={account._id}><td><strong>{account.accountName}</strong><br /><small>{account.accountNumber}</small></td><td>{account.bankId?.bankName || 'Bank'}</td><td><span className={`status ${account.status === 'active' ? 'verified' : account.status === 'pending' ? 'pending' : ''}`}>{account.status}</span></td><td><strong>{currency(account.balance)}</strong></td></tr>} /></table></div> : <p className="empty-state">No bank accounts opened yet.</p>}
+  </section>;
+}
+
 function UserDashboard({ profile, banks, applications, notice, setNotice, onLoanApplication, onVirtualLoanPayment, onAccountLoanPayment, onRefreshBanks, onActivity, token, systemAnnualInterestRate }) {
   const [depositAmount, setDepositAmount] = useState('');
   const [depositPhoneNumber, setDepositPhoneNumber] = useState('');
   const [depositAccountId, setDepositAccountId] = useState('');
   const [loanForm, setLoanForm] = useState({ bankId: '', branchId: '', amount: '', termMonths: '12', purpose: '', hasExternalLoans: false, externalLoanDetails: '' });
   const [bankAccounts, setBankAccounts] = useState([]);
-  const [accountForm, setAccountForm] = useState({ bankId: '', branchId: '', accountName: profile.name || '' });
   const [transferForm, setTransferForm] = useState({ fromAccountId: '', toAccountId: '', amount: '', description: '' });
   const [recipientSearch, setRecipientSearch] = useState('');
   const [transferRecipient, setTransferRecipient] = useState(null);
   const [recipientLookup, setRecipientLookup] = useState({ status: 'idle', message: '', recipients: [] });
-  const [submittingAccount, setSubmittingAccount] = useState(false);
   const [submittingDeposit, setSubmittingDeposit] = useState(false);
   const [submittingLoan, setSubmittingLoan] = useState(false);
-  const [refreshingBanks, setRefreshingBanks] = useState(false);
   const [submittingTransfer, setSubmittingTransfer] = useState(false);
-  const [accountNotice, setAccountNotice] = useState({ type: '', text: '' });
   const [depositNotice, setDepositNotice] = useState({ type: '', text: '' });
   const [transferNotice, setTransferNotice] = useState({ type: '', text: '' });
   const activeAccounts = bankAccounts.filter((account) => account.status === 'active');
@@ -2186,8 +2403,21 @@ function UserDashboard({ profile, banks, applications, notice, setNotice, onLoan
   const activeLoan = applications.find((application) => ['approved', 'defaulted'].includes(application.status));
   const hasExistingApplication = applications.length > 0;
   const selectedLoanBank = banks.find((bank) => bank._id === loanForm.bankId);
-  const selectedAccountBank = banks.find((bank) => bank._id === accountForm.bankId);
-  const selectedAccountBranches = selectedAccountBank?.branches.filter((branch) => /^[\da-f]{24}$/i.test(String(branch._id || ''))) || [];
+  const pendingAccounts = bankAccounts.filter((account) => account.status === 'pending');
+  const accountActivityMonths = recentMonths().map((month) => {
+    const monthTransactions = transactions.filter((transaction) => {
+      const date = new Date(transaction.createdAt);
+      return `${date.getFullYear()}-${date.getMonth()}` === month.key;
+    });
+    return {
+      label: month.label,
+      income: monthTransactions.filter((transaction) => ['deposit', 'transfer_in', 'loan_disbursement'].includes(transaction.type))
+        .reduce((total, transaction) => total + Number(transaction.amount || 0), 0),
+      expense: monthTransactions.filter((transaction) => ['withdrawal', 'transfer_out', 'loan_payment'].includes(transaction.type))
+        .reduce((total, transaction) => total + Number(transaction.amount || 0), 0)
+    };
+  });
+  const maxAccountActivity = Math.max(...accountActivityMonths.flatMap((month) => [month.income, month.expense]), 1);
 
   useEffect(() => {
     if (!token) return;
@@ -2267,32 +2497,6 @@ function UserDashboard({ profile, banks, applications, notice, setNotice, onLoan
     }
   };
 
-  async function handleCreateAccount(event) {
-    event.preventDefault();
-    if (!/^[\da-f]{24}$/i.test(accountForm.bankId) || !/^[\da-f]{24}$/i.test(accountForm.branchId)) {
-      setAccountNotice({ type: 'error', text: 'Select a bank and a valid sub-branch. If branches are unavailable, refresh the page or ask an administrator to add a branch.' });
-      return;
-    }
-
-    setSubmittingAccount(true);
-    setAccountNotice({ type: '', text: '' });
-    try {
-      const { account } = await createBankAccount(token, {
-        bankId: accountForm.bankId,
-        branchId: accountForm.branchId,
-        accountName: accountForm.accountName || `${profile.name} account`
-      });
-      setBankAccounts((current) => [account, ...current]);
-      setAccountForm({ bankId: '', branchId: '', accountName: profile.name || '' });
-      setAccountNotice({ type: 'success', text: `Bank account generated: ${account.accountNumber}` });
-      onActivity('A customer bank account was opened.');
-    } catch (error) {
-      setAccountNotice({ type: 'error', text: error.message });
-    } finally {
-      setSubmittingAccount(false);
-    }
-  }
-
   async function handleTransfer(event) {
     event.preventDefault();
     if (!transferForm.fromAccountId || !transferRecipient?.accountId || transferForm.toAccountId !== transferRecipient.accountId) {
@@ -2325,7 +2529,33 @@ function UserDashboard({ profile, banks, applications, notice, setNotice, onLoan
 
   return <>
     {(depositNotice.text || transferNotice.text) && <div className="bank-notice"><Notice notice={transferNotice.text ? transferNotice : depositNotice} /></div>}
-    <div className="bank-stats"><article className="balance-stat"><span>Available balance</span><strong>{currency(balance)}</strong><small>{activeAccounts.length} active bank account{activeAccounts.length === 1 ? '' : 's'}</small></article><article><span>Loan requests</span><strong>{applications.length}</strong><small>{applications.filter((application) => application.status === 'pending').length} under review</small></article><article><span>Account holder</span><strong>{profile.name}</strong><small>Verified customer</small></article></div>
+    <div className="customer-account-overview">
+      <section className="bank-panel customer-balance-card">
+        <span className="eyebrow">MY BALANCE</span>
+        <strong>{currency(balance)}</strong>
+        <small>{activeAccounts.length} active personal account{activeAccounts.length === 1 ? '' : 's'}</small>
+        <div className="customer-quick-actions">
+          <button className="bank-button" type="button" onClick={() => document.getElementById('customer-deposit')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}><ArrowDownToLine size={16} /> Deposit</button>
+          <button className="manage-button" type="button" onClick={() => document.getElementById('customer-transfer')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}><ArrowRight size={16} /> Transfer</button>
+          <button className="manage-button" type="button" onClick={() => document.getElementById('customer-account-opening')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}><Building2 size={16} /> Open account</button>
+        </div>
+      </section>
+      <section className="bank-panel customer-account-summary-panel">
+        <div className="bank-panel-heading"><div><span className="eyebrow">ACCOUNT OVERVIEW</span><h2>My accounts</h2></div><Building2 size={21} /></div>
+        <div className="customer-account-counts"><div><strong>{activeAccounts.length}</strong><span>Active</span></div><div><strong>{pendingAccounts.length}</strong><span>Pending review</span></div><div><strong>{applications.length}</strong><span>Loan requests</span></div></div>
+        <div className="customer-account-bank-list">{bankAccounts.slice(0, 3).map((account) => <div key={account._id}><span className={`customer-account-dot ${account.status}`} /><span><strong>{account.accountName}</strong><small>{account.bankId?.bankName || 'Bank'} · {account.accountNumber}</small></span><b className={`status ${account.status === 'active' ? 'verified' : account.status === 'pending' ? 'pending' : ''}`}>{account.status}</b></div>)}</div>
+      </section>
+      <section className="bank-panel customer-activity-chart">
+        <div className="bank-panel-heading"><div><span className="eyebrow">ACCOUNT ACTIVITY</span><h2>Income and spending</h2><p>Recorded transactions · last six months</p></div><Wallet size={21} /></div>
+        <div className="customer-chart-legend"><span><i className="income" /> Money in</span><span><i className="expense" /> Money out</span></div>
+        <div className="customer-chart-bars" role="img" aria-label="Monthly recorded income and spending from your account transactions">
+          {accountActivityMonths.map((month) => <div className="customer-chart-month" key={month.label} title={`${month.label}: money in ${currency(month.income)}, money out ${currency(month.expense)}`}>
+            <div className="customer-chart-pair"><span className="income" style={{ height: month.income ? `${Math.max(4, month.income / maxAccountActivity * 100)}%` : '0%' }} /><span className="expense" style={{ height: month.expense ? `${Math.max(4, month.expense / maxAccountActivity * 100)}%` : '0%' }} /></div>
+            <small>{month.label}</small>
+          </div>)}
+        </div>
+      </section>
+    </div>
     <div className="bank-grid"><section className="bank-panel" id="customer-deposit"><div className="bank-panel-heading"><div><span className="eyebrow">MOVE MONEY</span><h2>Make a deposit</h2></div><ArrowDownToLine size={23} /></div><form className="bank-form" onSubmit={submitDeposit}><label htmlFor="deposit-account">Deposit into</label><select className="bank-text-input" id="deposit-account" value={depositAccountId} onChange={(event) => setDepositAccountId(event.target.value)} required disabled={!activeAccounts.length}><option value="">{activeAccounts.length ? 'Select an account' : 'Open a bank account first'}</option>{activeAccounts.map((account) => <option key={account._id} value={account._id}>{account.accountName} · {account.accountNumber}</option>)}</select><label htmlFor="deposit-phone">Mobile money phone number</label><input className="bank-text-input" id="deposit-phone" type="tel" autoComplete="tel" value={depositPhoneNumber} onChange={(event) => setDepositPhoneNumber(event.target.value)} placeholder="0781234567" required disabled={!activeAccounts.length} /><label htmlFor="deposit-amount">Deposit amount (RWF)</label><div className="money-input"><img className="rf-currency-logo" src="/rf-currency.svg" alt="Rwandan franc" /><input id="deposit-amount" type="number" min="1" step="1" value={depositAmount} onChange={(event) => setDepositAmount(event.target.value)} placeholder="0" required disabled={!activeAccounts.length} /></div><button className="bank-button" type="submit" disabled={!activeAccounts.length || submittingDeposit}>{submittingDeposit ? 'Sending payment request...' : <><ArrowDownToLine size={17} /> Pay with mobile money</>}</button></form>{depositNotice.text && <div className="bank-notice"><Notice notice={depositNotice} /></div>}<p className="form-disclaimer">Approve the mobile-money prompt on your phone. Your account is credited after Paypack confirms payment.</p></section>
       <section className="bank-panel" id="customer-loan-application"><div className="bank-panel-heading"><div><span className="eyebrow">CREDIT</span><h2>Apply for a loan</h2></div><HandCoins size={23} /></div>{hasExistingApplication ? <div className="loan-application-message" role="status"><strong>{activeLoan ? 'Another loan application is not available yet.' : 'You already have a loan application.'}</strong><p>{activeLoan ? `You currently have a loan with ${activeLoan.bankName}. Please settle it before applying for another loan.` : 'Check Your loan requests below for the latest update.'}</p></div> : <form className="bank-form" onSubmit={submitLoan}>
         <label htmlFor="loan-bank">Bank</label><select className="bank-text-input" id="loan-bank" value={loanForm.bankId} onChange={(event) => setLoanForm({ ...loanForm, bankId: event.target.value, branchId: '' })} required><option value="">Select a bank</option>{banks.map((bank) => { const hasSubBranches = bank.branches?.some((branch) => /^[\da-f]{24}$/i.test(String(branch._id || ''))); return <option key={bank._id} value={bank._id} disabled={!hasSubBranches}>{bank.bankName}{bank.accountNumber ? ` · ${bank.accountNumber}` : ''}{hasSubBranches ? '' : ' (no sub-branches)'}</option>; })}</select>
@@ -2337,20 +2567,18 @@ function UserDashboard({ profile, banks, applications, notice, setNotice, onLoan
         {notice.type === 'error' && <Notice notice={notice} />}
         <button className="bank-button" type="submit" disabled={loanForm.hasExternalLoans || hasExistingApplication || submittingLoan}>{submittingLoan ? 'Submitting...' : hasExistingApplication ? 'Application already submitted' : <><HandCoins size={17} /> Submit for review</>}</button><p className="form-disclaimer">System annual interest rate: {systemAnnualInterestRate}%. Approved funds are deposited to your account at this bank.</p>
       </form>}</section></div>
-    <section className="bank-panel"><div className="bank-panel-heading"><div><span className="eyebrow">BANK ACCOUNT</span><h2>Open a bank account</h2></div><button className="text-button" type="button" disabled={refreshingBanks} onClick={async () => { setRefreshingBanks(true); await onRefreshBanks(); setRefreshingBanks(false); }}>{refreshingBanks ? 'Loading banks...' : 'Refresh banks'}</button></div>
-      <form className="bank-form" onSubmit={handleCreateAccount}>
-        <label htmlFor="bank-account-bank">Bank</label>
-        <select className="bank-text-input" id="bank-account-bank" value={accountForm.bankId} onChange={(event) => setAccountForm({ ...accountForm, bankId: event.target.value, branchId: '' })} required><option value="">Select a bank</option>{banks.map((bank) => { const hasSubBranches = bank.branches?.some((branch) => /^[\da-f]{24}$/i.test(String(branch._id || ''))); return <option key={bank._id} value={bank._id} disabled={!hasSubBranches}>{bank.bankName}{bank.accountNumber ? ` · ${bank.accountNumber}` : ''}{hasSubBranches ? '' : ' (no sub-branches)'}</option>; })}</select>
-        <label htmlFor="bank-account-branch">Sub-branch</label>
-        <select className="bank-text-input" id="bank-account-branch" value={accountForm.branchId} onChange={(event) => setAccountForm({ ...accountForm, branchId: event.target.value })} required disabled={!selectedAccountBranches.length}><option value="">{!selectedAccountBank ? 'Select a bank first' : selectedAccountBranches.length ? 'Select a sub-branch' : selectedAccountBank.branches.length ? 'Branch IDs unavailable. Refresh the page.' : 'No sub-branches available'}</option>{selectedAccountBranches.map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName}{branch.branchCode ? ` · ${branch.branchCode}` : ''}</option>)}</select>
-        <label htmlFor="bank-account-name">Account name</label>
-        <input className="bank-text-input" id="bank-account-name" value={accountForm.accountName} onChange={(event) => setAccountForm({ ...accountForm, accountName: event.target.value })} placeholder="Savings account" required />
-        <button className="bank-button" type="submit" disabled={submittingAccount}>{submittingAccount ? 'Opening account...' : 'Open bank account'}</button>
-      </form>
-      {accountNotice.text && <div className="bank-notice"><Notice notice={accountNotice} /></div>}
-      {bankAccounts.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Account</th><th>Bank</th><th>Status</th><th>Available balance</th></tr></thead><PaginatedRows rows={bankAccounts} colSpan={4} renderRow={(account) => <tr key={account._id}><td><strong>{account.accountName}</strong><br /><small>{account.accountNumber}</small></td><td>{account.bankId?.bankName || 'Bank'}</td><td><span className={`status ${account.status === 'active' ? 'verified' : ''}`}>{account.status}</span></td><td><strong>{currency(account.balance)}</strong></td></tr>} /></table></div> : <p className="empty-state">No bank accounts opened yet.</p>}
-    </section>
-    <section className="bank-panel"><div className="bank-panel-heading"><div><span className="eyebrow">TRANSFER</span><h2>Move funds between accounts</h2></div><ArrowRight size={23} /></div>
+    <PersonalAccountOpeningForm
+      profile={profile}
+      banks={banks}
+      token={token}
+      accounts={bankAccounts}
+      onRefreshBanks={onRefreshBanks}
+      onAccountCreated={(account) => {
+        setBankAccounts((current) => [account, ...current]);
+        onActivity('A personal bank account request was submitted for identity review.');
+      }}
+    />
+    <section className="bank-panel" id="customer-transfer"><div className="bank-panel-heading"><div><span className="eyebrow">TRANSFER</span><h2>Move funds between accounts</h2></div><ArrowRight size={23} /></div>
       <form className="bank-form" onSubmit={handleTransfer}>
         <label htmlFor="transfer-from">From account</label>
         <select className="bank-text-input" id="transfer-from" value={transferForm.fromAccountId} onChange={(event) => setTransferForm({ ...transferForm, fromAccountId: event.target.value })} required disabled={!activeAccounts.length}><option value="">Select source account</option>{activeAccounts.map((account) => <option key={account._id} value={account._id}>{account.accountName} · {account.accountNumber}</option>)}</select>
@@ -2370,7 +2598,7 @@ function UserDashboard({ profile, banks, applications, notice, setNotice, onLoan
       </form>
     </section>
     <section className="bank-panel transaction-panel" id="customer-activity"><div className="bank-panel-heading"><div><span className="eyebrow">ACCOUNT ACTIVITY</span><h2>All transactions</h2></div><Wallet size={22} /></div>{transactions.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Date</th><th>Account</th><th>Transaction</th><th>Amount</th><th>Balance after</th></tr></thead><PaginatedRows rows={transactions} colSpan={5} renderRow={(transaction) => <tr key={`${transaction.accountNumber}-${transaction._id}`}><td>{new Date(transaction.createdAt).toLocaleString()}</td><td>{transaction.accountName}<br /><small>{transaction.accountNumber}</small></td><td>{transaction.description || transaction.type.replaceAll('_', ' ')}</td><td className={['deposit', 'transfer_in', 'loan_disbursement'].includes(transaction.type) ? 'financial-positive' : 'financial-negative'}>{['deposit', 'transfer_in', 'loan_disbursement'].includes(transaction.type) ? '+' : '-'}{currency(transaction.amount)}</td><td>{currency(transaction.balanceAfter)}</td></tr>} /></table></div> : <p className="empty-state">Your account activity will appear here.</p>}</section>
-    <section className="bank-panel loans-panel" id="customer-applications"><div className="bank-panel-heading"><div><span className="eyebrow">YOUR LOANS</span><h2>My loans &amp; repayments</h2></div><Clock3 size={22} /></div><p className="loan-repayment-intro">You can make repayments on your own approved loan below, using your eligible bank account or the virtual payment simulator.</p>{latestApplications.length ? <div className="loan-list">{latestApplications.map((application) => <article className="customer-loan-row" key={application._id}><div className="customer-loan-summary"><strong><LoanMoney amount={application.amount} /> · {application.bankName}</strong><small>{application.purpose} · {application.branchName} · {application.termMonths} months</small>{application.annualInterestRate !== undefined && <small>{application.annualInterestRate}% annual interest · {currency(application.monthlyPayment)} estimated monthly payment</small>}<small>Outstanding principal: {currency(application.outstandingPrincipal)} · {currency(application.interestIncome)} interest paid</small></div><span className={`loan-status ${application.status}`}>{application.status}</span>{application.status === 'approved' && <CustomerLoanRepayment application={application} accounts={eligibleLoanAccounts(application)} onAccountPay={onAccountLoanPayment} onVirtualPay={onVirtualLoanPayment} onAccountsRefresh={async () => { const { accounts } = await getMyBankAccounts(token); setBankAccounts(accounts || []); }} />}{application.repayments?.length > 0 && <div className="customer-payment-receipts">{application.repayments.slice(-3).reverse().map((item, index) => <div key={`${application._id}-receipt-${index}`}><strong>{currency(item.amount)} · {new Date(item.paidAt).toLocaleDateString()}</strong><small>{item.receiptNumber ? `Receipt ${item.receiptNumber} · ` : ''}{item.paymentMode === 'virtual_simulation' ? 'Virtual simulation' : item.paymentMode === 'account_transfer' ? 'Paid from bank account' : 'Received by bank staff'}{item.paymentChannel ? ` · ${item.paymentChannel.replaceAll('_', ' ')}` : ''}</small></div>)}</div>}</article>)}</div> : <p className="empty-state">You have not applied for a loan yet.</p>}</section>
+    <section className="bank-panel loans-panel" id="customer-applications"><div className="bank-panel-heading"><div><span className="eyebrow">YOUR LOANS</span><h2>My loans &amp; repayments</h2></div><Clock3 size={22} /></div><p className="loan-repayment-intro">You can make repayments on your own approved loan below, using your eligible bank account or the virtual payment simulator.</p>{latestApplications.length ? <div className="loan-list">{latestApplications.map((application) => <article className="customer-loan-row" key={application._id}><div className="customer-loan-summary"><strong><LoanMoney amount={application.amount} /> · {application.bankName}</strong><small>{application.purpose} · {application.branchName} · {application.termMonths} months</small>{application.annualInterestRate !== undefined && <small>{application.annualInterestRate}% annual interest · {currency(application.monthlyPayment)} estimated monthly payment</small>}<small>Outstanding principal: {currency(application.outstandingPrincipal)} · {currency(application.interestIncome)} interest paid</small></div><span className={`loan-status ${application.status}`}>{application.status}</span>{application.status === 'approved' && <CustomerLoanRepayment application={application} accounts={eligibleLoanAccounts(application)} onAccountPay={onAccountLoanPayment} onVirtualPay={onVirtualLoanPayment} onAccountsRefresh={async () => { const { accounts } = await getMyBankAccounts(token); setBankAccounts(accounts || []); }} />}{application.repayments?.length > 0 && <div className="customer-payment-receipts">{[...application.repayments].reverse().map((item, index) => <div key={`${application._id}-receipt-${index}`}><strong>{currency(item.amount)} · {new Date(item.paidAt).toLocaleDateString()}</strong><small>{item.receiptNumber ? `Receipt ${item.receiptNumber} · ` : ''}{item.paymentMode === 'virtual_simulation' ? 'Virtual simulation' : item.paymentMode === 'account_transfer' ? 'Paid from bank account' : 'Received by bank staff'}{item.paymentChannel ? ` · ${item.paymentChannel.replaceAll('_', ' ')}` : ''}</small><button className="manage-button customer-receipt-download" type="button" onClick={() => downloadLoanReceipt(application, item)}><ArrowDownToLine size={14} /> Download receipt</button></div>)}</div>}</article>)}</div> : <p className="empty-state">You have not applied for a loan yet.</p>}</section>
   </>;
 }
 
@@ -2381,7 +2609,9 @@ function CustomerLoanRepayment({ application, accounts, onAccountPay, onVirtualP
   const [channel, setChannel] = useState('mtn_mobile_money');
   const [simulateFailure, setSimulateFailure] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [paymentFormOpen, setPaymentFormOpen] = useState(false);
   const [notice, setNotice] = useState({ type: '', text: '' });
+  const [latestReceipt, setLatestReceipt] = useState(null);
   const requestKey = useRef(null);
   const eligibleAccountIds = accounts.map((account) => account._id).join(':');
 
@@ -2414,6 +2644,14 @@ function CustomerLoanRepayment({ application, accounts, onAccountPay, onVirtualP
         return;
       }
       requestKey.current = null;
+      if (payment.status === 'succeeded') {
+        setLatestReceipt({
+          ...payment,
+          paymentMode: payment.mode || (method === 'account' ? 'account_transfer' : 'virtual_simulation'),
+          paymentChannel: payment.channel || (method === 'account' ? 'bank_account' : channel),
+          paidAt: payment.processedAt || new Date().toISOString()
+        });
+      }
       let accountRefreshWarning = '';
       if (payment.status === 'succeeded' && method === 'account') {
         try {
@@ -2435,14 +2673,20 @@ function CustomerLoanRepayment({ application, accounts, onAccountPay, onVirtualP
     }
   }
 
-  return <form className="customer-repayment-form" onSubmit={submit}>
+  return <>
+    <button className="bank-button customer-pay-loan-trigger" type="button" aria-expanded={paymentFormOpen} aria-controls={`loan-payment-${application._id}`} onClick={() => setPaymentFormOpen((open) => !open)}>
+      <HandCoins size={17} /> {paymentFormOpen ? 'Close payment' : 'Pay Loan'}
+    </button>
+    {paymentFormOpen && <form className="customer-repayment-form" id={`loan-payment-${application._id}`} onSubmit={submit}>
     <div><label>Repayment amount (RWF)<input type="number" min="1" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} required /></label><label>Payment method<select value={method} onChange={(event) => setMethod(event.target.value)}><option value="account" disabled={!accounts.length}>Pay from my bank account{accounts.length ? '' : ' (no eligible account)'}</option><option value="virtual">Virtual payment simulation</option></select></label></div>
     {!accounts.length && <p className="form-disclaimer">No active account is available at this loan’s bank and sub-branch. Open or activate an eligible account before choosing account repayment.</p>}
     {method === 'account' ? <label>Debit account<select value={accountId} onChange={(event) => setAccountId(event.target.value)} required><option value="">Select an eligible account</option>{accounts.map((account) => <option key={account._id} value={account._id}>{account.accountName} · {account.accountNumber} · {currency(account.balance)} available</option>)}</select></label> : <><label>Virtual payment method<select value={channel} onChange={(event) => setChannel(event.target.value)}><option value="mtn_mobile_money">MTN Mobile Money (simulation)</option><option value="airtel_mobile_money">Airtel Money (simulation)</option><option value="bank_transfer">Bank transfer (simulation)</option><option value="virtual_account">Virtual account (simulation)</option></select></label><label className="check-row"><input type="checkbox" checked={simulateFailure} onChange={(event) => setSimulateFailure(event.target.checked)} /> Simulate a declined payment (test only)</label></>}
     {notice.text && <Notice notice={notice} />}
+    {latestReceipt && <button className="manage-button customer-receipt-download" type="button" onClick={() => downloadLoanReceipt(application, latestReceipt)}><ArrowDownToLine size={14} /> Download receipt {latestReceipt.receiptNumber ? `· ${latestReceipt.receiptNumber}` : ''}</button>}
     <p className="form-disclaimer">{method === 'account' ? 'Your selected account will be debited immediately. The account must have sufficient available funds.' : 'Demo only: a successful test updates the loan ledger and issues a receipt. It does not debit an account or transfer real money.'}</p>
-    <button className="bank-button" type="submit" disabled={submitting || (method === 'account' && (!accounts.length || !accountId))}>{submitting ? 'Processing payment...' : 'Pay Loan'}</button>
-  </form>;
+    <button className="bank-button" type="submit" disabled={submitting || (method === 'account' && (!accounts.length || !accountId))}>{submitting ? 'Processing payment...' : 'Confirm payment'}</button>
+  </form>}
+  </>;
 }
 
 function BankStaffDashboard({ banks, token, profile, canManageAccounts = false, onActivity }) {

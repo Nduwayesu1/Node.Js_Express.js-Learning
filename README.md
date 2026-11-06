@@ -14,6 +14,12 @@ Every bank has a unique 12-digit bank account number. Each sub-branch is assigne
 
 Deploy the backend whenever these API routes change. The deployed API's `/api-docs.json` should include `/api/users/bank-admins`, `/api/users/members`, and the member `activate` and `deactivate` endpoints; otherwise the running backend is behind the frontend. The frontend's `VITE_API_URL` must point to the deployed backend.
 
+## Personal account applications
+
+Customers and employees can request a personal account from their dashboard by selecting a bank and sub-branch and uploading a National ID or passport as a JPEG, PNG, or PDF (maximum 1.4 MiB). The API checks the declared MIME type against the file signature, stores the document as an authenticated Cloudinary raw asset, and creates the account with pending status. Set `CLOUDINARY_URL` in the backend deployment secret manager; account requests fail explicitly if private Cloudinary storage is not configured.
+
+Only the System Admin or the Accounts Manager assigned to the account's bank and sub-branch can retrieve the document through the authenticated API; the Cloudinary asset itself is not public and document contents are excluded from account-list responses. A reviewer must retrieve/view the ID before the pending account can be approved. The applicant can use the account for deposits, transfers, or loan eligibility only after approval activates it. Handle ID/passport retention and deletion according to the institution's approved privacy policy.
+
 ## Loan finance
 
 Customers and employees may apply for a personal loan in their own name, using their own verified account and an active bank account at the selected branch. Customers are limited to their registered bank and require approved membership. Employees are limited to their assigned bank and branch; Bank Admins may select any branch in their assigned bank. Applicants can have only one application and cannot apply while they have an outstanding loan at another bank. The system sets the annual interest rate for every approved loan using `SYSTEM_ANNUAL_INTEREST_RATE` (12% by default). Managers approve or decline applications but cannot change the rate. The quoted installment and expected interest use reducing-balance amortization.

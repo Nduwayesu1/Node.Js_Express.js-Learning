@@ -252,7 +252,8 @@ router.get('/bank-accounts/recipients', requireAuth, bankController.searchTransf
  * @swagger
  * /api/bank-accounts:
  *   post:
- *     summary: Open a bank account
+ *     summary: Request a personal bank account
+ *     description: Customers and employees upload a National ID or passport as JPEG, PNG, or PDF. The identity file is stored as an authenticated Cloudinary asset and the account remains pending until an authorized reviewer approves it.
  *     tags: [Bank Accounts]
  *     security:
  *       - bearerAuth: []
@@ -262,17 +263,42 @@ router.get('/bank-accounts/recipients', requireAuth, bankController.searchTransf
  *         application/json:
  *           schema:
  *             type: object
- *             required: [bankId, branchId, accountName]
+ *             required: [bankId, branchId, accountName, identityDocumentType, identityDocument]
  *             properties:
  *               bankId: { type: string }
  *               branchId: { type: string }
  *               accountName: { type: string, example: My savings }
+ *               identityDocumentType: { type: string, enum: [national_id, passport] }
+ *               identityDocument: { type: string, format: byte, description: Base64 data URL of a JPEG, PNG, or PDF no larger than 1.4 MB }
  *     responses:
- *       201: { description: Account created with a generated 12-digit number }
- *       400: { description: Bank, branch, or account name is invalid }
+ *       201: { description: Account request created with a generated 12-digit number and pending review }
+ *       400: { description: Bank, branch, account name, or identity document is invalid }
  *       404: { description: Bank not found }
+ *       503: { description: Private Cloudinary storage is not configured }
  */
 router.post('/bank-accounts', requireAuth, bankController.createBankAccount);
+
+/**
+ * @swagger
+ * /api/bank-accounts/{accountId}/identity-document:
+ *   get:
+ *     summary: View a bank account applicant's private identity document
+ *     description: Streams the authenticated Cloudinary asset through the API. Only the System Admin or the Accounts Manager assigned to the account's bank and branch may view it.
+ *     tags: [Bank Accounts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: accountId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Private ID/passport document returned }
+ *       403: { description: Caller cannot review identity documents }
+ *       404: { description: Account or document not found }
+ *       502: { description: Secure document retrieval failed }
+ */
+router.get('/bank-accounts/:accountId/identity-document', requireAuth, bankController.getBankAccountIdentityDocument);
 
 /**
  * @swagger
@@ -330,11 +356,11 @@ router.post('/bank-accounts/:accountId/deposits', requireAuth, bankController.de
  *             type: object
  *             required: [status]
  *             properties:
- *               status: { type: string, enum: [active, inactive] }
+ *               status: { type: string, enum: [active, inactive], description: A pending account can only be approved after an authorized reviewer views its ID document. }
  *     responses:
  *       200: { description: Account status changed }
  *       400: { description: Invalid status or account identifier }
- *       403: { description: Admin or assigned bank-manager access is required }
+ *       403: { description: System Admin or assigned Accounts Manager access is required }
  *       404: { description: Account not found }
  */
 router.patch('/bank-accounts/:accountId/status', requireAuth, bankController.updateBankAccountStatus);

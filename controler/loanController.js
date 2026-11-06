@@ -7,6 +7,13 @@ const LoanPaymentAttempt = require('../modle/LoanPaymentAttempt');
 const User = require('../modle/User');
 const { getSystemAnnualInterestRate, calculateLoanTerms, calculateAccruedInterest, allocateRepayment, applyLoanDisbursement } = require('../utils/loanCalculations');
 const { requestVirtualPayment } = require('../utils/virtualPaymentClient');
+const {
+    MIDTRANS_BANKS,
+    getMidtransConfiguration,
+    getMidtransIdrAmount,
+    createVirtualAccount,
+    inquireVirtualAccount
+} = require('../utils/midtransSnapClient');
 
 const STAFF_REPAYMENT_CHANNELS = new Set(['cash', 'mobile_money', 'bank_transfer']);
 
@@ -328,10 +335,14 @@ async function payLoanWithVirtualSimulator(req, res) {
             return respondWithPaymentAttempt(res, previousAttempt, loan);
         }
 
-        const loan = await LoanApplication.findOne({ _id: req.params.loanId, applicant: req.user.id });
+        const loan = await LoanApplication.findOne({ _id: req.params.loanId, applicant: req.user.id })
+            .select('+pendingMidtransPayment');
         if (!loan) return res.status(404).json({ message: 'Loan application not found' });
         if (loan.status !== 'approved') {
             return res.status(409).json({ message: 'Only approved loans can receive repayments' });
+        }
+        if (loan.pendingMidtransPayment) {
+            return res.status(409).json({ message: 'A Midtrans bank transfer is still awaiting payment confirmation for this loan.' });
         }
 
         const paidAt = new Date();
@@ -396,10 +407,15 @@ async function payLoanWithVirtualSimulator(req, res) {
                     return;
                 }
 
-                const currentLoan = await LoanApplication.findOne({ _id: req.params.loanId, applicant: req.user.id }).session(session);
+                const currentLoan = await LoanApplication.findOne({ _id: req.params.loanId, applicant: req.user.id })
+                    .select('+pendingMidtransPayment')
+                    .session(session);
                 if (!currentLoan) throw Object.assign(new Error('Loan application not found'), { status: 404 });
                 if (currentLoan.status !== 'approved') {
                     throw Object.assign(new Error('Only approved loans can receive repayments'), { status: 409 });
+                }
+                if (currentLoan.pendingMidtransPayment) {
+                    throw Object.assign(new Error('A Midtrans bank transfer is still awaiting payment confirmation for this loan.'), { status: 409 });
                 }
 
                 const transactionTime = new Date();
@@ -511,10 +527,15 @@ async function payLoanFromAccount(req, res) {
                     return;
                 }
 
-                const loan = await LoanApplication.findOne({ _id: req.params.loanId, applicant: req.user.id }).session(session);
+                const loan = await LoanApplication.findOne({ _id: req.params.loanId, applicant: req.user.id })
+                    .select('+pendingMidtransPayment')
+                    .session(session);
                 if (!loan) throw Object.assign(new Error('Loan application not found'), { status: 404 });
                 if (loan.status !== 'approved') {
                     throw Object.assign(new Error('Only approved loans can receive repayments'), { status: 409 });
+                }
+                if (loan.pendingMidtransPayment) {
+                    throw Object.assign(new Error('A Midtrans bank transfer is still awaiting payment confirmation for this loan.'), { status: 409 });
                 }
                 const account = await BankAccount.findOne({
                     _id: accountId,
@@ -626,6 +647,341 @@ async function payLoanFromAccount(req, res) {
         }
         console.error('Account loan repayment failed:', error.message);
         return res.status(500).json({ message: 'Unable to process account loan repayment' });
+    }
+}
+
+function midtransPaymentResponse(attempt) {
+    return {
+        status: attempt.status,
+        mode: 'midtrans_virtual_account',
+        amount: attempt.amount,
+        currency: attempt.currency,
+        providerAmount: attempt.providerAmount,
+        providerCurrency: attempt.providerCurrency,
+        channel: attempt.channel,
+        bank: attempt.providerBank,
+        virtualAccountNo: attempt.providerVirtualAccountNo,
+        virtualAccountName: attempt.providerVirtualAccountName,
+        expiresAt: attempt.providerExpiresAt,
+        reference: attempt.reference,
+        ...(attempt.receiptNumber ? { receiptNumber: attempt.receiptNumber } : {}),
+        ...(attempt.processedAt ? { processedAt: attempt.processedAt } : {})
+    };
+}
+
+function midtransAttemptMatches(attempt, { loanId, amount, bank }) {
+    return paymentAttemptMatches(attempt, { loanId, amount, channel: 'midtrans_va' })
+        && attempt.providerBank === bank;
+}
+
+async function requestMidtransVirtualAccount(attempt, customerName, customerEmail) {
+    const config = getMidtransConfiguration();
+    if (attempt.providerPartnerServiceId !== config.partnerServiceId) {
+        throw Object.assign(new Error('Midtrans partner configuration changed while this payment was pending. Contact the bank before retrying.'), { status: 409 });
+    }
+    const details = await createVirtualAccount({
+        reference: attempt.reference,
+        customerNo: attempt.providerCustomerNo,
+        customerName: customerName || 'Loan customer',
+        customerEmail,
+        amountIdr: attempt.providerAmount,
+        bank: attempt.providerBank,
+        expiresAt: attempt.providerExpiresAt
+    });
+    attempt.providerVirtualAccountNo = details.virtualAccountNo;
+    attempt.providerVirtualAccountName = details.virtualAccountName || customerName;
+    attempt.providerExpiresAt = new Date(details.expiredAt);
+    await attempt.save();
+    return attempt;
+}
+
+async function createMidtransLoanPayment(req, res) {
+    const { amount, bank, idempotencyKey } = req.body;
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+        return res.status(400).json({ message: 'Enter a positive whole-number RWF repayment.' });
+    }
+    if (!MIDTRANS_BANKS.has(bank)) {
+        return res.status(400).json({ message: 'Choose a supported Indonesian virtual-account bank.' });
+    }
+    if (!/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(idempotencyKey || '')) {
+        return res.status(400).json({ message: 'A valid payment request key is required.' });
+    }
+    if (!canRepayOwnLoan(req.user.role)) {
+        return res.status(403).json({ message: 'Only loan applicants can make repayments.' });
+    }
+
+    let config;
+    let providerAmount;
+    try {
+        config = getMidtransConfiguration();
+        providerAmount = getMidtransIdrAmount(amount, config.exchangeRate);
+    } catch (error) {
+        return res.status(error.status || 503).json({ message: error.message });
+    }
+
+    const attemptQuery = { applicant: req.user.id, idempotencyKey };
+    const attemptInput = { loanId: req.params.loanId, amount, bank };
+    let attempt;
+    try {
+        attempt = await LoanPaymentAttempt.findOne(attemptQuery)
+            .select('+providerPartnerServiceId +providerCustomerNo');
+        if (attempt) {
+            if (!midtransAttemptMatches(attempt, attemptInput)) {
+                return res.status(409).json({ message: 'This payment request key was already used for a different payment.' });
+            }
+            if (attempt.status !== 'pending' || attempt.providerVirtualAccountNo) {
+                const loan = await LoanApplication.findOne({ _id: attempt.loan, applicant: req.user.id });
+                return res.status(attempt.status === 'pending' ? 202 : 200).json({
+                    message: attempt.status === 'pending' ? 'Virtual account is awaiting payment.' : 'Midtrans payment status returned.',
+                    payment: midtransPaymentResponse(attempt),
+                    ...(loan ? { loan } : {})
+                });
+            }
+        } else {
+            const applicant = await User.findById(req.user.id).select('name email').lean();
+            if (!applicant) return res.status(404).json({ message: 'Applicant account not found.' });
+
+            const session = await mongoose.startSession();
+            try {
+                await session.withTransaction(async () => {
+                    const loan = await LoanApplication.findOne({ _id: req.params.loanId, applicant: req.user.id })
+                        .select('+pendingMidtransPayment')
+                        .session(session);
+                    if (!loan) throw Object.assign(new Error('Loan application not found.'), { status: 404 });
+                    if (loan.status !== 'approved') {
+                        throw Object.assign(new Error('Only approved loans can receive repayments.'), { status: 409 });
+                    }
+                    if (loan.pendingMidtransPayment) {
+                        throw Object.assign(new Error('A Midtrans bank transfer is already awaiting payment confirmation for this loan.'), { status: 409 });
+                    }
+                    const now = new Date();
+                    const interestDue = loan.unpaidInterest + calculateAccruedInterest(
+                        loan.outstandingPrincipal,
+                        loan.annualInterestRate,
+                        loan.lastPaymentAt || loan.approvedAt,
+                        now
+                    );
+                    allocateRepayment(amount, loan.outstandingPrincipal, interestDue);
+
+                    const reference = crypto.randomUUID();
+                    const customerNo = crypto.randomInt(1_000_000_000, 9_999_999_999).toString();
+                    const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+                    [attempt] = await LoanPaymentAttempt.create([{
+                        applicant: req.user.id,
+                        loan: loan._id,
+                        idempotencyKey,
+                        reference,
+                        amount,
+                        currency: 'RWF',
+                        channel: 'midtrans_va',
+                        status: 'pending',
+                        providerAmount,
+                        providerCurrency: 'IDR',
+                        providerBank: bank,
+                        providerPartnerServiceId: config.partnerServiceId,
+                        providerCustomerNo: customerNo,
+                        providerCustomerName: applicant.name || 'Loan customer',
+                        providerCustomerEmail: applicant.email,
+                        providerExpiresAt: expiresAt
+                    }], { session });
+                    loan.pendingMidtransPayment = attempt._id;
+                    await loan.save({ session });
+                });
+            } catch (error) {
+                if (error.code === 11000) {
+                    attempt = await LoanPaymentAttempt.findOne(attemptQuery)
+                        .select('+providerPartnerServiceId +providerCustomerNo');
+                    if (attempt && midtransAttemptMatches(attempt, attemptInput)) {
+                        // The same idempotent request may be retried after a network interruption.
+                    } else {
+                        return res.status(409).json({ message: error.message || 'Another payment is already awaiting confirmation for this loan.' });
+                    }
+                } else if (error.status) {
+                    return res.status(error.status).json({ message: error.message });
+                } else if (error.message === 'Repayment exceeds the current balance due') {
+                    return res.status(400).json({ message: error.message });
+                } else {
+                    throw error;
+                }
+            } finally {
+                await session.endSession();
+            }
+        }
+
+        try {
+            attempt = await requestMidtransVirtualAccount(attempt, attempt.providerCustomerName, attempt.providerCustomerEmail);
+        } catch (error) {
+            if (!error.uncertain) {
+                const session = await mongoose.startSession();
+                try {
+                    await session.withTransaction(async () => {
+                        const currentAttempt = await LoanPaymentAttempt.findOne({ _id: attempt._id, status: 'pending' }).session(session);
+                        if (!currentAttempt) return;
+                        currentAttempt.status = 'failed';
+                        currentAttempt.processedAt = new Date();
+                        await currentAttempt.save({ session });
+                        const loan = await LoanApplication.findOne({
+                            _id: currentAttempt.loan,
+                            applicant: req.user.id,
+                            pendingMidtransPayment: currentAttempt._id
+                        }).select('+pendingMidtransPayment').session(session);
+                        if (loan) {
+                            loan.pendingMidtransPayment = undefined;
+                            await loan.save({ session });
+                        }
+                    });
+                } finally {
+                    await session.endSession();
+                }
+            }
+            return res.status(error.status || 503).json({
+                message: error.uncertain
+                    ? `${error.message} Retry using the same payment request key to safely recover the virtual-account details.`
+                    : error.message
+            });
+        }
+
+        return res.status(202).json({
+            message: 'Virtual account created. Complete the IDR bank transfer, then check its payment status.',
+            payment: midtransPaymentResponse(attempt)
+        });
+    } catch (error) {
+        if (error.message === 'Repayment exceeds the current balance due') {
+            return res.status(400).json({ message: error.message });
+        }
+        console.error('Midtrans virtual-account creation failed:', error.message);
+        return res.status(500).json({ message: 'Unable to create the Midtrans virtual account.' });
+    }
+}
+
+async function checkMidtransLoanPayment(req, res) {
+    if (!/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(req.params.idempotencyKey || '')) {
+        return res.status(400).json({ message: 'A valid payment request key is required.' });
+    }
+    if (!canRepayOwnLoan(req.user.role)) {
+        return res.status(403).json({ message: 'Only loan applicants can check their own payment.' });
+    }
+
+    const attemptQuery = {
+        applicant: req.user.id,
+        loan: req.params.loanId,
+        idempotencyKey: req.params.idempotencyKey,
+        channel: 'midtrans_va'
+    };
+    let session;
+    try {
+        let attempt = await LoanPaymentAttempt.findOne(attemptQuery)
+            .select('+providerPartnerServiceId +providerCustomerNo');
+        if (!attempt) return res.status(404).json({ message: 'Midtrans payment request not found.' });
+        if (attempt.status !== 'pending') {
+            const loan = await LoanApplication.findOne({ _id: attempt.loan, applicant: req.user.id });
+            return res.status(200).json({
+                message: attempt.status === 'succeeded' ? 'Midtrans payment confirmed.' : `Midtrans payment ${attempt.status}.`,
+                payment: midtransPaymentResponse(attempt),
+                ...(loan ? { loan } : {})
+            });
+        }
+
+        if (!attempt.providerVirtualAccountNo) {
+            attempt = await requestMidtransVirtualAccount(attempt, attempt.providerCustomerName, attempt.providerCustomerEmail);
+        }
+        const status = await inquireVirtualAccount({
+            reference: attempt.reference,
+            amountIdr: attempt.providerAmount,
+            partnerServiceId: attempt.providerPartnerServiceId,
+            customerNo: attempt.providerCustomerNo,
+            virtualAccountNo: attempt.providerVirtualAccountNo
+        });
+
+        session = await mongoose.startSession();
+        let updatedLoan;
+        await session.withTransaction(async () => {
+            const currentAttempt = await LoanPaymentAttempt.findOne({ _id: attempt._id, applicant: req.user.id }).session(session);
+            if (!currentAttempt) throw Object.assign(new Error('Midtrans payment request not found.'), { status: 404 });
+            if (currentAttempt.status !== 'pending') {
+                updatedLoan = await LoanApplication.findOne({ _id: currentAttempt.loan, applicant: req.user.id }).session(session);
+                attempt = currentAttempt;
+                return;
+            }
+
+            const loan = await LoanApplication.findOne({ _id: currentAttempt.loan, applicant: req.user.id })
+                .select('+pendingMidtransPayment')
+                .session(session);
+            if (!loan) throw Object.assign(new Error('Loan application not found.'), { status: 404 });
+            if (String(loan.pendingMidtransPayment || '') !== String(currentAttempt._id)) {
+                throw Object.assign(new Error('The pending Midtrans payment no longer matches this loan. Contact the bank before retrying.'), { status: 409 });
+            }
+
+            if (status.status === 'pending') {
+                attempt = currentAttempt;
+                updatedLoan = loan;
+                return;
+            }
+            if (status.status === 'failed' || status.status === 'expired') {
+                currentAttempt.status = status.status;
+                currentAttempt.processedAt = new Date();
+                loan.pendingMidtransPayment = undefined;
+                await currentAttempt.save({ session });
+                await loan.save({ session });
+                attempt = currentAttempt;
+                updatedLoan = loan;
+                return;
+            }
+
+            const paidAt = new Date(status.paidAt);
+            const paymentTime = Number.isNaN(paidAt.getTime()) ? new Date() : paidAt;
+            const interestDue = loan.unpaidInterest + calculateAccruedInterest(
+                loan.outstandingPrincipal,
+                loan.annualInterestRate,
+                loan.lastPaymentAt || loan.approvedAt,
+                paymentTime
+            );
+            const allocation = allocateRepayment(currentAttempt.amount, loan.outstandingPrincipal, interestDue);
+            currentAttempt.status = 'succeeded';
+            currentAttempt.receiptNumber = `RCP-${crypto.randomUUID()}`;
+            currentAttempt.processedAt = paymentTime;
+            loan.repayments.push({
+                amount: currentAttempt.amount,
+                interestPortion: allocation.interestPortion,
+                principalPortion: allocation.principalPortion,
+                recordedBy: req.user.id,
+                paymentReference: currentAttempt.reference,
+                receiptNumber: currentAttempt.receiptNumber,
+                paymentChannel: 'midtrans_va',
+                paymentMode: 'midtrans_virtual_account',
+                paidAt: paymentTime
+            });
+            loan.interestIncome += allocation.interestPortion;
+            loan.principalRecovered += allocation.principalPortion;
+            loan.outstandingPrincipal = allocation.remainingPrincipal;
+            loan.unpaidInterest = allocation.remainingInterest;
+            loan.lastPaymentAt = paymentTime;
+            loan.pendingMidtransPayment = undefined;
+            if (loan.outstandingPrincipal === 0) loan.status = 'repaid';
+            await currentAttempt.save({ session });
+            await loan.save({ session });
+            attempt = currentAttempt;
+            updatedLoan = loan;
+        });
+
+        return res.status(200).json({
+            message: attempt.status === 'succeeded'
+                ? `Midtrans payment confirmed. Receipt ${attempt.receiptNumber}.`
+                : attempt.status === 'pending'
+                    ? 'Payment is not confirmed yet. Complete the bank transfer and check again.'
+                    : `Midtrans payment ${attempt.status}.`,
+            payment: midtransPaymentResponse(attempt),
+            ...(updatedLoan ? { loan: updatedLoan } : {})
+        });
+    } catch (error) {
+        if (error.message === 'Repayment exceeds the current balance due') {
+            return res.status(409).json({ message: 'Midtrans confirmed payment, but the repayment can no longer be applied automatically. Contact the bank for reconciliation.' });
+        }
+        if (error.status) return res.status(error.status).json({ message: error.message });
+        console.error('Midtrans payment status check failed:', error.message);
+        return res.status(502).json({ message: 'Unable to verify the Midtrans payment status securely.' });
+    } finally {
+        if (session) await session.endSession();
     }
 }
 

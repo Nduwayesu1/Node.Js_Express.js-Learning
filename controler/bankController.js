@@ -6,6 +6,12 @@ const PaymentAttempt = require('../modle/PaymentAttempt');
 const User = require('../modle/User');
 const { generateAccountNumber, maskAccountNumber, applyTransfer } = require('../utils/bankAccountUtils');
 const { isPaypackConfigured, normalizeRwandaPhoneNumber, initiatePaypackCashin, verifyPaypackSignature } = require('../config/paypack');
+const {
+    parseIdentityDocument,
+    uploadIdentityDocument,
+    downloadIdentityDocument,
+    deleteIdentityDocument
+} = require('../utils/identityDocumentStorage');
 
 function isMissingAccountNumber(value) {
     return typeof value !== 'string' || !value.trim() || ['undefined', 'null'].includes(value.trim().toLowerCase());
@@ -193,17 +199,26 @@ async function addBranch(req, res) {
 }
 
 async function createBankAccount(req, res) {
-    const { bankId, branchId, accountName } = req.body;
+    const { bankId, branchId, accountName, identityDocumentType, identityDocument } = req.body;
+    if (!['user', 'employee'].includes(req.user.role)) {
+        return res.status(403).json({ message: 'Only customers and employees may open a personal bank account.' });
+    }
 
     if (!mongoose.Types.ObjectId.isValid(bankId) || !mongoose.Types.ObjectId.isValid(branchId)) {
         return res.status(400).json({ message: 'A valid bank and branch are required.' });
+    }
+    if (!['national_id', 'passport'].includes(identityDocumentType)) {
+        return res.status(400).json({ message: 'Choose National ID or passport as your identity document.' });
     }
 
     const trimmedName = typeof accountName === 'string' ? accountName.trim() : '';
     if (!trimmedName) {
         return res.status(400).json({ message: 'A bank account name is required.' });
     }
+    const parsedDocument = parseIdentityDocument(identityDocument);
+    if (parsedDocument.error) return res.status(400).json({ message: parsedDocument.error });
 
+    let uploadedDocumentId;
     try {
         const bank = await Bank.findById(bankId).lean();
         if (!bank) return res.status(404).json({ message: 'Bank not found.' });
@@ -215,6 +230,21 @@ async function createBankAccount(req, res) {
             if (customer?.customerBankId && String(customer.customerBankId) !== String(bankId)) {
                 return res.status(403).json({ message: 'You can only open accounts at the bank you registered with.' });
             }
+        } else {
+            const employee = await User.findById(req.user.id).select('role staffRole bankId branchId isActive').lean();
+            if (employee?.role !== 'employee' || employee.isActive === false || String(employee.bankId || '') !== String(bankId)) {
+                return res.status(403).json({ message: 'You can only open an account at your assigned bank.' });
+            }
+            if (employee.staffRole !== 'bank_admin' && String(employee.branchId || '') !== String(branchId)) {
+                return res.status(403).json({ message: 'You can only open an account at your assigned sub-branch.' });
+            }
+        }
+
+        try {
+            uploadedDocumentId = await uploadIdentityDocument(parsedDocument.document, parsedDocument.extension);
+        } catch (error) {
+            console.error('Identity document upload failed:', error.message);
+            return res.status(error.status || 502).json({ message: error.status === 503 ? error.message : 'Unable to securely store your identity document.' });
         }
 
         const usedNumbers = new Set((await BankAccount.find({}, 'accountNumber').lean()).map((entry) => entry.accountNumber));
@@ -226,15 +256,23 @@ async function createBankAccount(req, res) {
             branchId,
             accountNumber,
             accountName: trimmedName,
-            status: 'active',
+            identityDocumentType,
+            identityDocumentPublicId: uploadedDocumentId,
+            identityDocumentFormat: parsedDocument.extension,
+            identityDocumentUploadedAt: new Date(),
+            status: 'pending',
             balance: 0,
             transactions: []
         });
-
-        await User.findByIdAndUpdate(req.user.id, { bankAccountId: account._id });
-
-        return res.status(201).json({ message: 'Bank account created successfully.', account });
+        return res.status(201).json({ message: 'Account request submitted. It will be available after your identity document is reviewed.', account });
     } catch (error) {
+        if (uploadedDocumentId) {
+            try {
+                await deleteIdentityDocument(uploadedDocumentId);
+            } catch (cleanupError) {
+                console.error('Identity document cleanup failed after account creation error:', cleanupError.message);
+            }
+        }
         console.error('Bank account creation failed:', error.message);
         return res.status(500).json({ message: 'Unable to create bank account.' });
     }
@@ -608,6 +646,40 @@ async function transferBetweenAccounts(req, res) {
     }
 }
 
+async function getBankAccountIdentityDocument(req, res) {
+    if (!mongoose.Types.ObjectId.isValid(req.params.accountId)) {
+        return res.status(400).json({ message: 'A valid bank account is required.' });
+    }
+    try {
+        const account = await BankAccount.findById(req.params.accountId)
+            .select('+identityDocumentPublicId +identityDocumentFormat');
+        if (!account) return res.status(404).json({ message: 'Bank account not found.' });
+        if (!await canManageBankAccount(req.user, account)) {
+            return res.status(403).json({ message: 'Only the assigned Accounts Manager or System Admin may review identity documents.' });
+        }
+        if (!account.identityDocumentPublicId || !account.identityDocumentFormat) {
+            return res.status(404).json({ message: 'No identity document is available for this account.' });
+        }
+
+        const document = await downloadIdentityDocument(account.identityDocumentPublicId, account.identityDocumentFormat);
+        account.identityDocumentViewedAt = new Date();
+        account.identityDocumentViewedBy = req.user.id;
+        await account.save();
+        const contentTypes = { jpg: 'image/jpeg', png: 'image/png', pdf: 'application/pdf' };
+        res.set({
+            'Content-Type': contentTypes[account.identityDocumentFormat],
+            'Content-Disposition': `inline; filename="identity-document.${account.identityDocumentFormat}"`,
+            'Cache-Control': 'private, no-store',
+            'X-Content-Type-Options': 'nosniff'
+        });
+        return res.status(200).send(document);
+    } catch (error) {
+        if (error.status) return res.status(error.status).json({ message: error.message });
+        console.error('Identity document retrieval failed:', error.message);
+        return res.status(502).json({ message: 'Unable to retrieve the identity document securely.' });
+    }
+}
+
 async function updateBankAccountStatus(req, res) {
     const { status } = req.body;
     if (!['active', 'inactive'].includes(status)) {
@@ -618,10 +690,23 @@ async function updateBankAccountStatus(req, res) {
     }
 
     try {
-        const account = await BankAccount.findById(req.params.accountId);
+        const account = await BankAccount.findById(req.params.accountId)
+            .select('+identityDocumentPublicId +identityDocumentFormat +identityDocumentUploadedAt +identityDocumentViewedAt +identityDocumentViewedBy');
         if (!account) return res.status(404).json({ message: 'Bank account not found.' });
         if (!await canManageBankAccount(req.user, account)) {
             return res.status(403).json({ message: 'Only an administrator or the account bank manager can change this status.' });
+        }
+        if (status === 'active' && account.status === 'pending') {
+            if (!account.identityDocumentPublicId || !account.identityDocumentFormat) {
+                return res.status(409).json({ message: 'A valid identity document is required before approving this account.' });
+            }
+            if (!account.identityDocumentViewedAt
+                || !account.identityDocumentViewedBy
+                || (account.identityDocumentUploadedAt && account.identityDocumentViewedAt < account.identityDocumentUploadedAt)) {
+                return res.status(409).json({ message: 'View the applicant identity document before approving this account.' });
+            }
+            account.identityDocumentReviewedAt = new Date();
+            account.identityDocumentReviewedBy = req.user.id;
         }
         account.status = status;
         await account.save();
@@ -643,6 +728,7 @@ module.exports = {
     listBankAccounts,
     listBankAccountsForUser,
     getBankAccountTransactions,
+    getBankAccountIdentityDocument,
     searchTransferRecipients,
     depositToBankAccount,
     paypackWebhook,

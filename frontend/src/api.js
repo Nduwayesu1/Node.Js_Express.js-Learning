@@ -77,6 +77,21 @@ export const searchTransferRecipients = (token, name) => {
   return apiRequest(`/api/bank-accounts/recipients?${query}`, { token });
 };
 export const createBankAccount = (token, body) => apiRequest('/api/bank-accounts', { method: 'POST', token, body });
+export const getBankAccountIdentityDocument = async (token, accountId) => {
+  let response;
+  try {
+    response = await fetch(`${API_URL}/api/bank-accounts/${accountId}/identity-document`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  } catch {
+    throw new Error('Unable to reach the API to retrieve the identity document.');
+  }
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.message || `Unable to retrieve the identity document (HTTP ${response.status}).`);
+  }
+  return response.blob();
+};
 export const depositToBankAccount = (token, accountId, amount, phoneNumber) => apiRequest(`/api/bank-accounts/${accountId}/deposits`, { method: 'POST', token, body: { amount, phoneNumber } });
 export const updateBankAccountStatus = (token, accountId, status) => apiRequest(`/api/bank-accounts/${accountId}/status`, { method: 'PATCH', token, body: { status } });
 export const transferBetweenAccounts = (token, body) => apiRequest('/api/bank-accounts/transfer', { method: 'POST', token, body });

@@ -586,3 +586,149 @@ body { background: #f2f7f5; color: var(--ink); }
 .dashboard-shell .bank-staff-count { background: #e6f4ef; }
 .dashboard-shell .nav-item:focus-visible, .dashboard-shell button:focus-visible { outline-color: #13a58e; }
 @media (max-width: 820px) { .dashboard-shell .sidebar { box-shadow: 20px 0 60px rgba(10, 58, 52, .3); } }
+.customer-pay-loan-trigger { grid-column: 1 / -1; justify-self: start; min-height: 40px; margin: 0; padding: 0 16px; }
+.customer-receipt-download { display: inline-flex; align-items: center; gap: 5px; width: max-content; }
+.dashboard-shell .customer-receipt-download { color: #0e766b; border-color: #d1e0da; background: #edf7f3; }
+.dashboard-shell .customer-receipt-download:hover { background: #dff1eb; }
+
+.auth-shell {
+  min-height: 100vh;
+  padding: 28px;
+  background:
+    radial-gradient(ellipse at 12% 26%, rgba(196, 146, 97, .44), transparent 34%),
+    radial-gradient(ellipse at 78% 86%, rgba(11, 99, 91, .45), transparent 40%),
+    linear-gradient(125deg, #182f34 0%, #173d43 48%, #102d33 100%);
+}
+.auth-shell::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: '';
+  background:
+    linear-gradient(90deg, transparent 0 13%, rgba(255,255,255,.035) 13.1% 13.4%, transparent 13.5% 100%),
+    radial-gradient(ellipse at 72% 45%, rgba(212, 184, 145, .15), transparent 31%);
+}
+.auth-shell .stars, .auth-shell .mountains { display: none; }
+.auth-layout {
+  width: min(1420px, 100%);
+  min-height: calc(100vh - 56px);
+  max-width: 1420px;
+  grid-template-columns: minmax(0, 1fr) minmax(350px, 410px);
+  grid-template-rows: auto 1fr;
+  align-items: center;
+  gap: 30px clamp(36px, 7vw, 100px);
+  margin: 0 auto;
+  padding: 0 clamp(26px, 5vw, 76px) 36px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.55);
+  border-radius: 30px;
+  background: linear-gradient(135deg, rgba(255,255,255,.055), rgba(255,255,255,.012));
+  box-shadow: 0 24px 80px rgba(2, 20, 25, .24);
+}
+.auth-topbar {
+  grid-column: 1 / -1;
+  min-height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  border-bottom: 1px solid rgba(255,255,255,.16);
+}
+.auth-brand { display: inline-flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font-size: 15px; font-weight: 800; letter-spacing: .08em; }
+.auth-brand > span { display: grid; gap: 3px; }
+.auth-brand small { color: rgba(235,247,244,.68); font-size: 8px; letter-spacing: .16em; }
+.auth-topbar nav { display: flex; align-items: center; gap: clamp(14px, 3vw, 36px); }
+.auth-topbar nav a, .auth-secure-link { color: rgba(244,249,247,.85); text-decoration: none; font-size: 11px; }
+.auth-topbar nav a:hover, .auth-secure-link:hover { color: #fff; }
+.auth-secure-link { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid rgba(255,255,255,.42); border-radius: 999px; }
+.auth-layout .brand-copy { align-self: center; max-width: 620px; padding: 20px 0; }
+.hero-kicker { display: inline-flex; align-items: center; gap: 8px; color: #a8d7c8; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.auth-layout .brand-copy h1 { margin: 24px 0 20px; font-size: clamp(3rem, 6vw, 5rem); line-height: 1.04; letter-spacing: -.05em; }
+.auth-layout .brand-copy h1 em { color: #81d1b3; }
+.auth-layout .brand-copy p { max-width: 440px; color: rgba(238,247,244,.78); font-size: 15px; }
+.auth-hero-actions { display: grid; justify-items: start; gap: 11px; margin-top: 30px; }
+.auth-primary-link { display: inline-flex; align-items: center; gap: 10px; padding: 12px 18px; border-radius: 999px; color: #fff; background: #137e70; font-size: 12px; font-weight: 700; text-decoration: none; box-shadow: 0 8px 26px rgba(7, 24, 28, .2); }
+.auth-primary-link:hover { background: #169987; }
+.auth-hero-actions > span { color: rgba(238,247,244,.63); font-size: 10px; }
+.auth-layout .trust-line { color: #c1e6d9; margin-top: 30px; }
+.auth-card { width: 100%; padding: 32px; border: 1px solid rgba(255,255,255,.8); border-radius: 16px; background: rgba(255,255,255,.97); box-shadow: 0 22px 65px rgba(2, 18, 24, .26); }
+.auth-card .card-heading h2 { color: #173a35; }
+.auth-card .card-heading .eyebrow { color: #0e766b; }
+.auth-card .primary-button { background: linear-gradient(135deg, #0e766b, #16a085); }
+.auth-card .text-button, .auth-card .quiet-button { color: #0e766b; }
+.auth-card .field:focus-within { border-color: #13a58e; }
+.auth-card .card-footer { border-color: #dce8e4; }
+.customer-account-overview { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 16px; margin-bottom: 16px; }
+.dashboard-shell .customer-balance-card { display: flex; min-height: 220px; flex-direction: column; align-items: flex-start; justify-content: center; padding: 25px; color: #fff; border: 0; background: linear-gradient(130deg, #103f3b, #0e766b 68%, #169985); }
+.dashboard-shell .customer-balance-card .eyebrow, .dashboard-shell .customer-balance-card small { color: rgba(239,255,249,.78); }
+.dashboard-shell .customer-balance-card > strong { margin: 12px 0 4px; color: #fff; font-size: clamp(27px, 4vw, 38px); letter-spacing: -.04em; }
+.customer-quick-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 19px; }
+.dashboard-shell .customer-quick-actions .bank-button, .dashboard-shell .customer-quick-actions .manage-button { min-height: 36px; margin: 0; padding: 0 12px; border: 1px solid rgba(255,255,255,.28); border-radius: 5px; color: #fff; background: rgba(255,255,255,.15); font-size: 10px; }
+.dashboard-shell .customer-quick-actions .bank-button:hover, .dashboard-shell .customer-quick-actions .manage-button:hover { background: rgba(255,255,255,.25); }
+.customer-account-summary-panel .bank-panel-heading { margin-bottom: 13px; }
+.customer-account-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 13px; }
+.customer-account-counts > div { padding: 10px; border-radius: 5px; background: #f3f8f6; }
+.customer-account-counts strong, .customer-account-counts span { display: block; }
+.customer-account-counts strong { color: #0e766b; font-size: 20px; }
+.customer-account-counts span { margin-top: 3px; color: #647a74; font-size: 9px; }
+.customer-account-bank-list > div { display: flex; align-items: center; gap: 9px; padding: 9px 0; border-top: 1px solid #e6eeea; }
+.customer-account-bank-list > div > span:nth-child(2) { min-width: 0; flex: 1; }
+.customer-account-bank-list strong, .customer-account-bank-list small { display: block; }
+.customer-account-bank-list strong { color: #173a35; font-size: 11px; }
+.customer-account-bank-list small { margin-top: 3px; color: #647a74; font-size: 9px; overflow-wrap: anywhere; }
+.customer-account-bank-list .status { font-size: 9px; }
+.customer-account-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: #aab9b3; }
+.customer-account-dot.active { background: #0e9b71; }
+.customer-account-dot.pending { background: #d49a32; }
+.customer-activity-chart { grid-column: 1 / -1; }
+.customer-activity-chart .bank-panel-heading { margin-bottom: 10px; }
+.customer-activity-chart .bank-panel-heading p { margin: 5px 0 0; color: #647a74; font-size: 10px; }
+.customer-chart-legend { display: flex; gap: 18px; color: #647a74; font-size: 10px; }
+.customer-chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.customer-chart-legend i { width: 8px; height: 8px; border-radius: 2px; background: #0e766b; }
+.customer-chart-legend i.expense { background: #d6c6ee; }
+.customer-chart-bars { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; height: 150px; margin-top: 11px; padding-top: 10px; border-bottom: 1px solid #e5eeea; background: repeating-linear-gradient(to bottom, transparent 0, transparent 36px, #edf2ef 37px); }
+.customer-chart-month { display: grid; grid-template-rows: 1fr auto; min-width: 0; justify-items: center; }
+.customer-chart-pair { display: flex; width: min(42px, 100%); align-items: flex-end; justify-content: center; gap: 4px; }
+.customer-chart-pair span { width: 12px; min-height: 0; border-radius: 4px 4px 0 0; background: #0e766b; }
+.customer-chart-pair span.expense { background: #cbb8e8; }
+.customer-chart-month small { padding: 6px 0; color: #647a74; font-size: 9px; }
+.customer-open-account .form-disclaimer { color: #647a74; }
+.identity-document-input { padding: 9px; }
+.account-review-actions { min-width: 190px; }
+.account-review-actions .manage-button, .account-review-actions .activate-button { margin: 2px; white-space: nowrap; }
+.identity-document-preview { display: grid; grid-template-rows: auto minmax(240px, 70vh); width: min(900px, 100%); }
+.identity-document-preview > img, .identity-document-preview > iframe { width: 100%; height: 100%; min-height: 0; margin-top: 14px; border: 1px solid #dce8e4; border-radius: 5px; background: #f6faf8; object-fit: contain; }
+.identity-document-preview .modal-heading h2 { color: #173a35; }
+@media (max-width: 820px) {
+  .auth-shell { padding: 14px; }
+  .auth-layout { min-height: calc(100vh - 28px); grid-template-columns: 1fr; gap: 18px; padding: 0 24px 28px; border-radius: 20px; }
+  .auth-topbar { min-height: 68px; flex-wrap: wrap; }
+  .auth-topbar nav { gap: 14px; }
+  .auth-topbar nav a { font-size: 10px; }
+  .auth-layout .brand-copy { padding: 15px 0 0; }
+  .auth-layout .brand-copy h1 { margin: 16px 0 12px; font-size: clamp(2.6rem, 8vw, 4rem); }
+  .auth-layout .brand-copy p { display: block; margin: 0; }
+  .auth-hero-actions { margin-top: 18px; }
+  .auth-layout .trust-line { margin-top: 16px; }
+  .auth-card { max-width: 480px; justify-self: center; }
+}
+@media (max-width: 600px) {
+  .auth-shell { padding: 0; }
+  .auth-layout { min-height: 100vh; padding: 0 20px 25px; border: 0; border-radius: 0; }
+  .auth-topbar { gap: 8px; }
+  .auth-brand { font-size: 12px; }
+  .auth-brand .brand-logo { width: 36px; height: 36px; flex-basis: 36px; }
+  .auth-topbar nav { order: 3; width: 100%; justify-content: space-between; padding: 0 0 11px; }
+  .auth-secure-link { margin-left: auto; padding: 8px 10px; font-size: 10px; }
+  .auth-layout .brand-copy { padding-top: 8px; }
+  .hero-kicker { font-size: 9px; }
+  .auth-layout .brand-copy p { font-size: 13px; }
+  .auth-card { padding: 25px 20px 22px; }
+  .customer-account-overview { grid-template-columns: 1fr; }
+  .customer-activity-chart { grid-column: auto; }
+  .customer-account-counts { gap: 5px; }
+  .customer-account-counts > div { padding: 8px; }
+  .customer-chart-bars { gap: 4px; }
+  .account-review-actions { min-width: 0; }
+}
