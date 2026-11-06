@@ -491,6 +491,7 @@ body { background: #eef4ff; color: var(--ink); }
 .dashboard-shell .attendance-evidence-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .dashboard-shell .attendance-evidence-actions .manage-button { color: #1558cf; border-color: #c7d9f6; background: #eef4ff; }
 .dashboard-shell .attendance-evidence-actions .manage-button:hover:not(:disabled) { background: #dceaff; }
+.dashboard-shell .attendance-employee-cell { vertical-align: top; border-right: 1px solid #e5edf9; background: #f6f9ff; }
 .dashboard-shell .bank-panel .empty-state, .dashboard-shell .bank-dashboard .empty-state { color: #64799d; }
 .guest-dashboard-shell .financial-positive, .dashboard-shell .financial-positive { color: #1558cf; }
 .dashboard-shell .mobile-menu { color: #1558cf; }

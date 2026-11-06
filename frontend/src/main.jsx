@@ -1635,6 +1635,14 @@ function HRDashboard({ token }) {
     .slice(0, 7)
     .reverse()
     .map((dayKey) => ({ label: dayKey.slice(5), value: attendance.filter((record) => record.dayKey === dayKey).length }));
+  const attendanceByEmployee = [...attendance.reduce((groups, record) => {
+    const employeeId = String(record.employee?._id || record.employee?.email || record._id);
+    if (!groups.has(employeeId)) {
+      groups.set(employeeId, { id: employeeId, employee: record.employee, records: [] });
+    }
+    groups.get(employeeId).records.push(record);
+    return groups;
+  }, new Map()).values()];
 
   return <>
     {!loading && <ReportCards items={[
@@ -1655,7 +1663,7 @@ function HRDashboard({ token }) {
       <div className="bank-panel-heading"><div><span className="eyebrow">ATTENDANCE</span><h2>Daily employee attendance</h2></div><CalendarCheck size={22} /></div>
       <p className="form-disclaimer">Attendance photos are stored in authenticated Cloudinary storage and visible only to HR Managers assigned to this bank. Photos are evidence only; the system does not use facial recognition.</p>
       {photoError && <p className="notice error" role="alert">{photoError}</p>}
-      {attendance.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Employee</th><th>Sub-branch</th><th>Date</th><th>Check-in</th><th>Check-out</th><th>Attendance evidence</th></tr></thead><PaginatedRows rows={attendance} colSpan={6} renderRow={(record) => <tr key={record._id}><td><strong>{record.employee?.name || 'Employee'}</strong><br /><small>{record.employee?.email || ''}</small></td><td>{record.branchName || 'Unassigned'}</td><td>{record.dayKey}</td><td>{new Date(record.checkInAt).toLocaleTimeString()}</td><td>{record.checkOutAt ? new Date(record.checkOutAt).toLocaleTimeString() : 'Not checked out'}</td><td><div className="attendance-evidence-actions"><button className="manage-button" type="button" disabled={loadingPhotoId === `${record._id}:check-in`} onClick={() => showAttendancePhoto(record, 'check-in')}>{loadingPhotoId === `${record._id}:check-in` ? 'Loading...' : 'Check-in photo'}</button>{record.hasCheckOutPhoto && <button className="manage-button" type="button" disabled={loadingPhotoId === `${record._id}:check-out`} onClick={() => showAttendancePhoto(record, 'check-out')}>{loadingPhotoId === `${record._id}:check-out` ? 'Loading...' : 'Check-out photo'}</button>}</div></td></tr>} /></table></div> : !loading && <p className="empty-state">No employee attendance in the past 30 days.</p>}
+      {attendance.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Employee</th><th>Sub-branch</th><th>Date</th><th>Check-in</th><th>Check-out</th><th>Attendance evidence</th></tr></thead><PaginatedRows rows={attendanceByEmployee} colSpan={6} renderRow={(group) => group.records.map((record, index) => <tr key={record._id}>{index === 0 && <td className="attendance-employee-cell" rowSpan={group.records.length}><strong>{group.employee?.name || 'Employee'}</strong><br /><small>{group.employee?.email || ''}</small></td>}<td>{record.branchName || 'Unassigned'}</td><td>{record.dayKey}</td><td>{new Date(record.checkInAt).toLocaleTimeString()}</td><td>{record.checkOutAt ? new Date(record.checkOutAt).toLocaleTimeString() : 'Not checked out'}</td><td><div className="attendance-evidence-actions"><button className="manage-button" type="button" disabled={loadingPhotoId === `${record._id}:check-in`} onClick={() => showAttendancePhoto(record, 'check-in')}>{loadingPhotoId === `${record._id}:check-in` ? 'Loading...' : 'Check-in photo'}</button>{record.hasCheckOutPhoto && <button className="manage-button" type="button" disabled={loadingPhotoId === `${record._id}:check-out`} onClick={() => showAttendancePhoto(record, 'check-out')}>{loadingPhotoId === `${record._id}:check-out` ? 'Loading...' : 'Check-out photo'}</button>}</div></td></tr>)} /></table></div> : !loading && <p className="empty-state">No employee attendance in the past 30 days.</p>}
     </section>
     {photoUrl && <div className="modal-backdrop" role="presentation" onClick={() => setPhotoUrl('')}><section className="modal-card" role="dialog" aria-modal="true" aria-label="Attendance selfie" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">HR-ONLY ATTENDANCE EVIDENCE</span><h2>{photoTitle}</h2></div><button className="icon-button" type="button" aria-label="Close selfie" onClick={() => setPhotoUrl('')}><X size={18} /></button></div><img className="attendance-photo-preview" src={photoUrl} alt={photoTitle} /></section></div>}
     <section className="bank-panel transaction-panel">
