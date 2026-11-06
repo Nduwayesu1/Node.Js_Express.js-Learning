@@ -2,7 +2,31 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const mongoose = require('mongoose');
 const User = require('../modle/User');
-const { canManageLoan, canRepayOwnLoan, validateStaffRepaymentInput } = require('../controler/loanController');
+const { canManageLoan, canRepayOwnLoan, validateStaffRepaymentInput, canApplyForLoan, canEmployeeApplyAt } = require('../controler/loanController');
+
+test('customers and employees may apply for personal loans but other roles may not', () => {
+    assert.equal(canApplyForLoan('user'), true);
+    assert.equal(canApplyForLoan('employee'), true);
+    assert.equal(canApplyForLoan('admin'), false);
+    assert.equal(canApplyForLoan('guest'), false);
+});
+
+test('employee personal loan applications stay within assigned bank and branch', () => {
+    const bankId = new mongoose.Types.ObjectId();
+    const otherBankId = new mongoose.Types.ObjectId();
+    const branchId = new mongoose.Types.ObjectId();
+    const otherBranchId = new mongoose.Types.ObjectId();
+    const branchEmployee = { role: 'employee', staffRole: 'branch_manager', bankId, branchId, isActive: true };
+    const bankAdmin = { role: 'employee', staffRole: 'bank_admin', bankId, isActive: true };
+
+    assert.equal(canEmployeeApplyAt(branchEmployee, bankId, branchId), true);
+    assert.equal(canEmployeeApplyAt(branchEmployee, bankId, otherBranchId), false);
+    assert.equal(canEmployeeApplyAt(branchEmployee, otherBankId, branchId), false);
+    assert.equal(canEmployeeApplyAt({ ...branchEmployee, isActive: false }, bankId, branchId), false);
+    assert.equal(canEmployeeApplyAt(bankAdmin, bankId, branchId), true);
+    assert.equal(canEmployeeApplyAt(bankAdmin, otherBankId, branchId), false);
+    assert.equal(canEmployeeApplyAt({ ...bankAdmin, staffRole: 'general_manager' }, bankId, branchId), false);
+});
 
 test('customers and employees may repay only their own loans', () => {
     assert.equal(canRepayOwnLoan('user'), true);

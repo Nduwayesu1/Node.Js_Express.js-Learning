@@ -522,3 +522,67 @@ body { background: #eef4ff; color: var(--ink); }
 @media (max-width: 820px) {
   .dashboard-shell .sidebar { box-shadow: 20px 0 60px rgba(7, 26, 73, .3); }
 }
+
+:root {
+  --ink: #173a35;
+  --muted: #647a74;
+  --violet: #0e766b;
+  --violet-bright: #13a58e;
+  --line: rgba(15, 91, 79, .16);
+  --panel: rgba(255, 255, 255, .96);
+}
+body { background: #f2f7f5; color: var(--ink); }
+.auth-shell { background: radial-gradient(ellipse at 18% 55%, rgba(35, 155, 125, .58), transparent 34%), radial-gradient(ellipse at 85% 12%, rgba(14, 118, 107, .62), transparent 38%), linear-gradient(135deg, #082f33 0%, #0c5d55 53%, #138572 100%); }
+.dashboard-shell, .guest-dashboard-shell { color: var(--ink); background: linear-gradient(180deg, #f1f6f4 0%, #f8faf9 100%); }
+.dashboard-shell.bank-shell, .guest-dashboard-shell { background: #f1f6f4; }
+.dashboard-shell .topbar, .dashboard-shell.bank-shell .topbar { color: var(--ink); border-color: #dce8e4; background: rgba(255, 255, 255, .94); }
+.dashboard-shell .topbar-user, .dashboard-shell.bank-shell .topbar-user { color: #647a74; }
+.dashboard-shell .topbar .icon-button, .dashboard-shell.bank-shell .topbar .icon-button, .dashboard-shell .notification-trigger { color: #315a52; border-color: #d8e5e0; background: #fff; }
+.dashboard-shell .sidebar { background: linear-gradient(180deg, #103a38 0%, #0c5c53 60%, #0d7669 100%); }
+.dashboard-shell .sidebar .sidebar-label { color: #a4c4bc; }
+.dashboard-shell .sidebar .nav-item, .dashboard-shell .sidebar .logout-item { color: #d7e9e3; }
+.dashboard-shell .sidebar .nav-item:hover, .dashboard-shell .sidebar .nav-item.active { background: linear-gradient(90deg, rgba(91, 205, 166, .3), rgba(91, 205, 166, .08)); }
+.dashboard-shell .bank-dashboard .welcome-row h1, .dashboard-shell .bank-dashboard .panel h2, .dashboard-shell .bank-panel-heading h2, .dashboard-shell .panel-heading h2 { color: #173a35; }
+.dashboard-shell .bank-dashboard .welcome-row h1 em, .dashboard-shell .bank-dashboard .eyebrow, .dashboard-shell .eyebrow, .guest-dashboard-shell .eyebrow, .dashboard-shell .bank-panel-heading { color: #0e766b; }
+.dashboard-shell .role-pill { color: #315a52; border-color: #d8e5e0; background: #fff; }
+.dashboard-shell .bank-panel, .dashboard-shell .panel, .guest-dashboard-shell .guest-dashboard-header, .guest-dashboard-shell .bank-panel, .guest-dashboard-shell .panel { color: #173a35; border-color: #dce8e4; background: #fff; box-shadow: 0 8px 26px rgba(21, 64, 54, .055); }
+.dashboard-shell .bank-stats article, .dashboard-shell .stats-grid .stat-card { border-color: #dce8e4; background: #fff; box-shadow: 0 8px 26px rgba(21, 64, 54, .055); }
+.dashboard-shell .bank-stats article > span, .dashboard-shell .bank-stats article > small, .dashboard-shell .stats-grid .stat-label, .dashboard-shell .stats-grid .stat-card small { color: #647a74; }
+.dashboard-shell .stats-grid .stat-card { border-top-color: #0e766b; }
+.dashboard-shell .stats-grid .stat-card.green, .dashboard-shell .stats-grid .stat-card.orange, .dashboard-shell .stats-grid .stat-card.blue { border-color: #dce8e4; border-top-color: #0e766b; }
+.dashboard-shell .stats-grid .stat-menu { color: #0e766b; background: #e6f4ef; }
+.dashboard-shell .bank-stats .balance-stat { border-left-color: #0e766b; }
+.dashboard-shell .bank-stats .balance-stat > strong, .dashboard-shell .bank-stats article > strong { color: #0e766b; }
+.dashboard-shell .bank-button, .dashboard-shell .create-user-submit, .guest-dashboard-shell .bank-button { color: #fff; background: linear-gradient(135deg, #0e766b, #16a085); }
+.dashboard-shell .bank-button:hover:not(:disabled), .dashboard-shell .create-user-submit:hover:not(:disabled), .guest-dashboard-shell .bank-button:hover:not(:disabled) { background: linear-gradient(135deg, #0b5d55, #0e766b); }
+.dashboard-shell .bank-form > label:not(.check-row), .dashboard-shell .bank-create-form label, .dashboard-shell .check-row, .dashboard-shell .repayment-form label, .dashboard-shell .loan-review-form label { color: #315a52; }
+.dashboard-shell .bank-text-input, .dashboard-shell .money-input, .dashboard-shell .bank-create-form input, .dashboard-shell .bank-create-form select, .dashboard-shell .repayment-form input, .dashboard-shell .repayment-form select, .dashboard-shell .loan-review-form input, .dashboard-shell .employee-access-panel .user-table select, .dashboard-shell .directory-toolbar input, .dashboard-shell .directory-toolbar select, .dashboard-shell .create-user-field input, .dashboard-shell .create-user-field select { color: #173a35; border-color: #d1e0da; background: #fff; }
+.dashboard-shell .bank-text-input:focus, .dashboard-shell .money-input:focus-within, .dashboard-shell .repayment-form input:focus, .dashboard-shell .loan-review-form input:focus, .dashboard-shell .customer-repayment-form input:focus, .dashboard-shell .customer-repayment-form select:focus { border-color: #13a58e; box-shadow: 0 0 0 2px rgba(19, 165, 142, .14); }
+.dashboard-shell .check-row input { accent-color: #0e766b; }
+.dashboard-shell .loan-application-message { color: #315a52; border-color: #d1e0da; background: #f0f8f5; }
+.dashboard-shell .loan-application-message strong, .dashboard-shell .system-rate-label strong, .dashboard-shell .loan-quote strong, .dashboard-shell .bank-panel .transaction-row > b { color: #0e766b; }
+.dashboard-shell .loan-status.approved { color: #0e766b; background: #e6f4ef; }
+.dashboard-shell .financial-positive, .guest-dashboard-shell .financial-positive { color: #0e766b; }
+.dashboard-shell .bank-panel .transaction-icon, .dashboard-shell .activity-check { color: #0e766b; background: #e6f4ef; }
+.dashboard-shell .decision-actions button:not(:last-child), .dashboard-shell .attendance-evidence-actions .manage-button { color: #0e766b; border-color: #d1e0da; background: #edf7f3; }
+.dashboard-shell .decision-actions button:not(:last-child):hover, .dashboard-shell .attendance-evidence-actions .manage-button:hover:not(:disabled) { background: #dff1eb; }
+.dashboard-shell .notification-panel > header button, .dashboard-shell .recipient-selected button { color: #0e766b; }
+.dashboard-shell .activity-dot.unread { background-color: #0e766b; }
+.dashboard-shell .verified-label { color: #0e766b !important; }
+.dashboard-shell .mobile-menu { color: #0e766b; }
+.dashboard-shell .health-ring { background: conic-gradient(#0e766b 0 72%, #16a085 72% 90%, #eba344 90% 100%); }
+.dashboard-shell .large-avatar, .dashboard-shell .avatar { background: linear-gradient(135deg, #16a085, #0b5d55); }
+.dashboard-shell .customer-loan-row { border-color: #dce8e4; }
+.dashboard-shell .customer-repayment-form { border-top-color: #dce8e4; background: #f6faf8; }
+.dashboard-shell .attendance-checkout-form { border-top-color: #dce8e4; }
+.dashboard-shell .attendance-evidence-actions .manage-button { border-color: #d1e0da; }
+.dashboard-shell .attendance-employee-cell { border-right-color: #dce8e4; background: #f6faf8; }
+.dashboard-shell .management-modal { border-color: #dce8e4; }
+.dashboard-shell .management-modal-header { border-bottom-color: #dce8e4; }
+.dashboard-shell .recipient-options, .dashboard-shell .recipient-selected { border-color: #d1e0da; }
+.dashboard-shell .recipient-option:hover, .dashboard-shell .recipient-option:focus-visible { background: #edf7f3; }
+.dashboard-shell .bank-financial-summary > div { border-color: #dce8e4; background: #f6faf8; }
+.dashboard-shell .bank-financial-summary strong, .dashboard-shell .bank-staff-count { color: #0e766b; }
+.dashboard-shell .bank-staff-count { background: #e6f4ef; }
+.dashboard-shell .nav-item:focus-visible, .dashboard-shell button:focus-visible { outline-color: #13a58e; }
+@media (max-width: 820px) { .dashboard-shell .sidebar { box-shadow: 20px 0 60px rgba(10, 58, 52, .3); } }

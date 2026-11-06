@@ -24,7 +24,7 @@ router.get('/loans', requireAuth, loanController.listLoans);
  * /api/loans:
  *   post:
  *     summary: Submit a loan application
- *     description: Customer must have an active account at the selected bank and branch, be verified, have no existing application, and have no outstanding loan at another bank.
+ *     description: Customers and employees may apply for themselves with an active account at the selected bank and branch. Customers must be verified and approved members of their selected bank; employees must be verified and choose only their assigned bank and sub-branch (Bank Admins may choose any branch within their bank). Applicants may have only one application and no outstanding loan at another bank.
  *     tags: [Loans]
  *     security:
  *       - bearerAuth: []

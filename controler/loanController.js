@@ -10,6 +10,17 @@ const { requestVirtualPayment } = require('../utils/virtualPaymentClient');
 
 const STAFF_REPAYMENT_CHANNELS = new Set(['cash', 'mobile_money', 'bank_transfer']);
 
+function canApplyForLoan(role) {
+    return role === 'user' || role === 'employee';
+}
+
+function canEmployeeApplyAt(employee, bankId, branchId) {
+    if (employee?.role !== 'employee' || employee.isActive === false || !employee.bankId
+        || String(employee.bankId) !== String(bankId)) return false;
+    if (employee.branchId) return String(employee.branchId) === String(branchId);
+    return employee.staffRole === 'bank_admin';
+}
+
 async function listLoans(req, res) {
     try {
         let filter = {};
@@ -48,7 +59,7 @@ async function listLoans(req, res) {
 
 async function createLoan(req, res) {
     const { bankId, branchId, amount, purpose, termMonths, hasExternalLoans, externalLoanDetails } = req.body;
-    if (req.user.role !== 'user') return res.status(403).json({ message: 'Only customer accounts can apply for loans' });
+    if (!canApplyForLoan(req.user.role)) return res.status(403).json({ message: 'Only customers and employees can apply for loans' });
     if (hasExternalLoans) return res.status(403).json({ message: 'Applicants with an outstanding loan at another bank are not eligible' });
     if (!mongoose.Types.ObjectId.isValid(bankId) || !mongoose.Types.ObjectId.isValid(branchId)) {
         return res.status(400).json({ message: 'Select a valid bank and sub-branch' });
@@ -61,17 +72,27 @@ async function createLoan(req, res) {
     }
 
     try {
+        const applicantQuery = req.user.role === 'employee'
+            ? User.findById(req.user.id).select('name email role staffRole bankId branchId isVerified isActive')
+            : User.findById(req.user.id).select('name email role isVerified isApproved customerBankId');
         const [bank, applicant] = await Promise.all([
             Bank.findById(bankId),
-            User.findById(req.user.id).select('name email isVerified isApproved customerBankId')
+            applicantQuery
         ]);
         if (!bank) return res.status(404).json({ message: 'Bank not found' });
         const branch = bank.branches.id(branchId);
         if (!branch) return res.status(404).json({ message: 'Sub-branch not found in this bank' });
-        if (!applicant?.isVerified) return res.status(403).json({ message: 'A verified customer account is required' });
-        if (!applicant.isApproved) return res.status(403).json({ message: 'Your bank membership must be approved before applying for a loan' });
-        if (applicant.customerBankId && !applicant.customerBankId.equals(bank._id)) {
-            return res.status(403).json({ message: 'You can only apply for a loan at the bank you registered with' });
+        if (!applicant?.isVerified) return res.status(403).json({ message: 'A verified account is required to apply for a loan' });
+        if (req.user.role === 'user') {
+            if (!applicant.isApproved) return res.status(403).json({ message: 'Your bank membership must be approved before applying for a loan' });
+            if (applicant.customerBankId && !applicant.customerBankId.equals(bank._id)) {
+                return res.status(403).json({ message: 'You can only apply for a loan at the bank you registered with' });
+            }
+        } else {
+            if (!canEmployeeApplyAt(applicant, bank._id, branch._id)) {
+                return res.status(403).json({ message: 'You can only apply for a loan at your assigned bank while your employee account is active' });
+            }
+            if (applicant.branchId && !applicant.branchId.equals(branch._id)) return res.status(403).json({ message: 'You can only apply for a loan at your assigned sub-branch' });
         }
         const existingApplication = await LoanApplication.findOne({ applicant: applicant._id }).select('_id');
         if (existingApplication) {
@@ -638,5 +659,7 @@ module.exports = {
     paymentAttemptMatches,
     canManageLoan,
     canRepayOwnLoan,
-    validateStaffRepaymentInput
+    validateStaffRepaymentInput,
+    canApplyForLoan,
+    canEmployeeApplyAt
 };

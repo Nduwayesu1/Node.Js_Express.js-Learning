@@ -589,7 +589,7 @@ function Dashboard({ profile, users, banks, token, pagination, userQuery, setUse
       {manager && staffRole === 'bank_admin' && section === 'overview' && <BankAdminReportDashboard banks={banks} token={token} loanApplications={loanApplications} />}
       {manager && staffRole === 'hr_manager' && section === 'hr-dashboard' && <HRDashboard token={token} />}
       {manager && section === 'attendance' && <EmployeeAttendanceDashboard token={token} profile={profile} />}
-      {manager && section === 'my-loans' && <EmployeeLoanDashboard profile={profile} applications={loanApplications} token={token} onVirtualLoanPayment={onVirtualLoanPayment} onAccountLoanPayment={onAccountLoanPayment} />}
+      {manager && section === 'my-loans' && <EmployeeLoanDashboard profile={profile} applications={loanApplications} banks={banks} token={token} systemAnnualInterestRate={systemAnnualInterestRate} onLoanApplication={onLoanApplication} onVirtualLoanPayment={onVirtualLoanPayment} onAccountLoanPayment={onAccountLoanPayment} />}
       {manager && staffRole === 'finance_manager' && section === 'directory' && <BankStaffDirectoryDashboard token={token} />}
       {manager && staffRole === 'general_manager' && section === 'overview' && <GeneralManagerDashboard banks={banks} token={token} loanApplications={loanApplications} />}
       {manager && staffRole === 'finance_manager' && section === 'payroll' && <FinancePayrollDashboard banks={banks} token={token} onActivity={onActivity} />}
@@ -1840,12 +1840,21 @@ function EmployeeAttendanceDashboard({ token, profile }) {
   </>;
 }
 
-function EmployeeLoanDashboard({ profile, applications, token, onVirtualLoanPayment, onAccountLoanPayment }) {
+function EmployeeLoanDashboard({ profile, applications, banks, token, systemAnnualInterestRate, onLoanApplication, onVirtualLoanPayment, onAccountLoanPayment }) {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [submittingApplication, setSubmittingApplication] = useState(false);
+  const [applicationNotice, setApplicationNotice] = useState({ type: '', text: '' });
+  const [loanForm, setLoanForm] = useState({ bankId: '', branchId: '', amount: '', termMonths: '12', purpose: '', hasExternalLoans: false });
   const employeeLoans = applications.filter((application) => (
     String(application.applicant?._id || application.applicant) === String(profile._id)
+  ));
+  const selectedBank = banks.find((bank) => String(bank._id) === loanForm.bankId);
+  const hasActiveApplicationAccount = accounts.some((account) => (
+    account.status === 'active'
+    && String(account.bankId?._id || account.bankId) === loanForm.bankId
+    && String(account.branchId?._id || account.branchId) === loanForm.branchId
   ));
 
   useEffect(() => {
@@ -1857,17 +1866,80 @@ function EmployeeLoanDashboard({ profile, applications, token, onVirtualLoanPaym
     return () => { active = false; };
   }, [token]);
 
+  useEffect(() => {
+    const bank = banks.find((item) => item.branches?.some((branch) => String(branch._id) === String(profile.branchId)))
+      || (banks.length === 1 ? banks[0] : null);
+    if (!bank) return;
+    const branch = bank.branches?.find((item) => String(item._id) === String(profile.branchId))
+      || (bank.branches?.length === 1 ? bank.branches[0] : null);
+    setLoanForm((current) => ({
+      ...current,
+      bankId: current.bankId || String(bank._id),
+      branchId: current.branchId || (branch ? String(branch._id) : '')
+    }));
+  }, [banks, profile.branchId]);
+
   const eligibleLoanAccounts = (application) => accounts.filter((account) => (
     account.status === 'active'
     && String(account.bankId?._id || account.bankId) === String(application.bank?._id || application.bank)
     && String(account.branchId?._id || account.branchId) === String(application.branchId?._id || application.branchId)
   ));
 
+  const submitLoanApplication = async (event) => {
+    event.preventDefault();
+    if (employeeLoans.length) return setApplicationNotice({ type: 'error', text: 'You already have a loan application linked to your employee account.' });
+    if (!loanForm.bankId || !loanForm.branchId) return setApplicationNotice({ type: 'error', text: 'Select a sub-branch at your assigned bank.' });
+    if (!Number.isSafeInteger(Number(loanForm.amount)) || Number(loanForm.amount) <= 0) return setApplicationNotice({ type: 'error', text: 'Enter a positive whole-number RWF amount.' });
+    if (!hasActiveApplicationAccount) return setApplicationNotice({ type: 'error', text: 'You need an active personal bank account at this bank and sub-branch before applying.' });
+    setApplicationNotice({ type: '', text: '' });
+    setSubmittingApplication(true);
+    try {
+      const submitted = await onLoanApplication({
+        ...loanForm,
+        amount: Number(loanForm.amount),
+        termMonths: Number(loanForm.termMonths),
+        externalLoanDetails: loanForm.hasExternalLoans ? 'Outstanding loan reported' : 'None reported'
+      });
+      if (submitted) {
+        setLoanForm((current) => ({ ...current, amount: '', purpose: '', hasExternalLoans: false }));
+        setApplicationNotice({ type: 'success', text: 'Your personal loan application was submitted for review.' });
+      }
+    } finally {
+      setSubmittingApplication(false);
+    }
+  };
+
   return <>
     <section className="bank-panel transaction-panel">
       <div className="bank-panel-heading"><div><span className="eyebrow">EMPLOYEE LOANS</span><h2>My loans</h2></div><HandCoins size={22} /></div>
       <p className="form-disclaimer">You can repay only loans issued to you. Bank-account repayments debit an active account you own at the loan’s bank and sub-branch.</p>
       {error && <Notice notice={{ type: 'error', text: error }} />}
+      {!employeeLoans.length && <section className="bank-panel" aria-labelledby="employee-loan-application-title">
+        <div className="bank-panel-heading"><div><span className="eyebrow">PERSONAL APPLICATION</span><h3 id="employee-loan-application-title">Apply for a loan</h3></div><HandCoins size={21} /></div>
+        <p className="form-disclaimer">This application is in your own name and uses your personal active account at your assigned bank. Approval and repayment follow the same review process as customer applications.</p>
+        {applicationNotice.text && <Notice notice={applicationNotice} />}
+        <form className="bank-form" onSubmit={submitLoanApplication}>
+          <label htmlFor="employee-loan-bank">Assigned bank</label>
+          <select className="bank-text-input" id="employee-loan-bank" value={loanForm.bankId} onChange={(event) => setLoanForm({ ...loanForm, bankId: event.target.value, branchId: '' })} required>
+            <option value="">Select a bank</option>{banks.map((bank) => <option key={bank._id} value={bank._id}>{bank.bankName}</option>)}
+          </select>
+          <label htmlFor="employee-loan-branch">Sub-branch</label>
+          <select className="bank-text-input" id="employee-loan-branch" value={loanForm.branchId} onChange={(event) => setLoanForm({ ...loanForm, branchId: event.target.value })} required disabled={!selectedBank?.branches?.length}>
+            <option value="">Select a sub-branch</option>{selectedBank?.branches?.map((branch) => <option key={branch._id} value={branch._id}>{branch.branchName}{branch.branchCode ? ` · ${branch.branchCode}` : ''}</option>)}
+          </select>
+          <label htmlFor="employee-loan-amount">Amount requested (RWF)</label>
+          <div className="money-input"><img className="rf-currency-logo" src="/rf-currency.svg" alt="Rwandan franc" /><input id="employee-loan-amount" type="number" min="1" step="1" value={loanForm.amount} onChange={(event) => setLoanForm({ ...loanForm, amount: event.target.value })} placeholder="10000" required /></div>
+          <label htmlFor="employee-loan-term">Requested term (months)</label>
+          <input className="bank-text-input" id="employee-loan-term" type="number" min="1" max="360" step="1" value={loanForm.termMonths} onChange={(event) => setLoanForm({ ...loanForm, termMonths: event.target.value })} required />
+          <label htmlFor="employee-loan-purpose">What is the loan for?</label>
+          <input className="bank-text-input" id="employee-loan-purpose" value={loanForm.purpose} onChange={(event) => setLoanForm({ ...loanForm, purpose: event.target.value })} placeholder="e.g. Home improvement" required />
+          <label className="check-row"><input type="checkbox" checked={loanForm.hasExternalLoans} onChange={(event) => setLoanForm({ ...loanForm, hasExternalLoans: event.target.checked })} /> I have an outstanding loan with another bank</label>
+          {loanForm.hasExternalLoans && <p className="form-disclaimer">Applicants with an outstanding loan at another bank are not eligible.</p>}
+          {!loading && loanForm.bankId && loanForm.branchId && !hasActiveApplicationAccount && <p className="form-disclaimer">An active personal account at this bank and sub-branch is required before submission.</p>}
+          <button className="bank-button" type="submit" disabled={loading || submittingApplication || employeeLoans.length > 0 || loanForm.hasExternalLoans || !hasActiveApplicationAccount}>{loading ? 'Loading your accounts...' : submittingApplication ? 'Submitting...' : <><HandCoins size={17} /> Submit for review</>}</button>
+          <p className="form-disclaimer">System annual interest rate: {systemAnnualInterestRate}%. Approved funds are deposited to your account at this bank.</p>
+        </form>
+      </section>}
       {loading ? <p className="empty-state">Loading your loans...</p> : employeeLoans.length ? <div className="loan-list">{employeeLoans.map((application) => <article className="customer-loan-row" key={application._id}>
         <div className="customer-loan-summary"><strong><LoanMoney amount={application.amount} /> · {application.bankName}</strong><small>{application.purpose} · {application.branchName} · {application.termMonths} months</small>{application.annualInterestRate !== undefined && <small>{application.annualInterestRate}% annual interest · {currency(application.monthlyPayment)} estimated monthly payment</small>}<small>Outstanding principal: {currency(application.outstandingPrincipal)} · {currency(application.interestIncome)} interest paid</small></div>
         <span className={`loan-status ${application.status}`}>{application.status}</span>
